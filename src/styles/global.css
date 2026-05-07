@@ -80,6 +80,11 @@ html[data-theme='dark'] {
   box-sizing: border-box;
 }
 
+html {
+  /* Avoid sideways rubber-banding when something is 1–2px too wide */
+  overflow-x: clip;
+}
+
 html,
 body,
 #root {
@@ -98,6 +103,7 @@ body {
   -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
   transition: background-color 200ms ease, color 200ms ease;
+  overflow-x: clip;
 }
 
 a {
@@ -138,11 +144,14 @@ h4 { font-size: 15px; color: var(--text-muted); font-weight: 600; }
   z-index: 10;
   background: var(--bg-card);
   border-bottom: 1px solid var(--border);
-  padding: 12px 20px;
+  padding: max(12px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right))
+    12px max(20px, env(safe-area-inset-left));
   display: flex;
   align-items: center;
   gap: 16px;
-  backdrop-filter: saturate(140%) blur(8px);
+  flex-wrap: wrap;
+  backdrop-filter: saturate(140%) blur(10px);
+  -webkit-backdrop-filter: saturate(140%) blur(10px);
 }
 
 .app-header .logo {
@@ -163,13 +172,18 @@ h4 { font-size: 15px; color: var(--text-muted); font-weight: 600; }
   gap: 4px;
   flex-wrap: wrap;
   margin-left: 8px;
+  touch-action: manipulation;
 }
 .app-header nav a {
-  padding: 6px 12px;
+  padding: 8px 12px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
   border-radius: 999px;
   color: var(--text-muted);
   font-weight: 500;
   font-size: 14px;
+  flex-shrink: 0;
 }
 .app-header nav a:hover {
   background: var(--bg-soft);
@@ -187,13 +201,15 @@ h4 { font-size: 15px; color: var(--text-muted); font-weight: 600; }
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
   border-radius: 999px;
   border: 1px solid var(--border);
   background: var(--bg-card);
   color: var(--text);
   transition: all 150ms ease;
+  touch-action: manipulation;
+  flex-shrink: 0;
 }
 .icon-button:hover {
   background: var(--bg-soft);
@@ -202,10 +218,12 @@ h4 { font-size: 15px; color: var(--text-muted); font-weight: 600; }
 
 .app-main {
   flex: 1;
-  padding: 24px 20px 80px;
+  padding: 24px max(20px, env(safe-area-inset-right)) max(96px, calc(80px + env(safe-area-inset-bottom)))
+    max(20px, env(safe-area-inset-left));
   max-width: 1200px;
   width: 100%;
   margin: 0 auto;
+  min-width: 0;
 }
 
 .page-title {
@@ -259,6 +277,13 @@ h4 { font-size: 15px; color: var(--text-muted); font-weight: 600; }
 .grid-three { grid-template-columns: repeat(3, 1fr); }
 .grid-calculator {
   grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+}
+
+/* Keeps charts / sliders from blowing past the screen on narrow layouts */
+.grid-calculator > *,
+.grid-two > *,
+.grid-three > * {
+  min-width: 0;
 }
 
 @media (max-width: 900px) {
@@ -846,7 +871,7 @@ th:first-child, td:first-child { text-align: left; }
 .install-banner {
   position: fixed;
   left: 50%;
-  bottom: 16px;
+  bottom: max(16px, env(safe-area-inset-bottom));
   transform: translateX(-50%);
   background: var(--text);
   color: var(--bg-card);
@@ -906,6 +931,144 @@ th:first-child, td:first-child { text-align: left; }
   border: 1px solid var(--border) !important;
   border-radius: var(--radius-sm) !important;
   color: var(--text) !important;
+}
+
+/* ----------------------------------------------------------------------
+   Mobile / iPhone (safe areas, tap targets, no layout blowout)
+---------------------------------------------------------------------- */
+.page-toolbar {
+  flex-wrap: wrap;
+  gap: 10px !important;
+}
+
+@media (max-width: 640px) {
+  .page-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .page-toolbar .button {
+    width: 100%;
+    justify-content: center;
+    min-height: 48px;
+    padding-top: 12px;
+    padding-bottom: 12px;
+    font-size: 16px;
+    touch-action: manipulation;
+  }
+}
+
+/* Stacks tight headers (e.g. buyer comfort pill + long copy) without squish */
+.stack-sm-start {
+  flex-wrap: wrap;
+}
+
+@media (max-width: 560px) {
+  .stack-sm-start {
+    flex-direction: column;
+    align-items: flex-start !important;
+    gap: 12px;
+  }
+  .stack-sm-start .pill {
+    align-self: flex-start;
+    max-width: 100%;
+    white-space: normal;
+    line-height: 1.35;
+  }
+}
+
+@media (max-width: 719px) {
+  .app-header .spacer {
+    display: none;
+  }
+  /* Row 1: logo + theme. Row 2: full-width horizontal nav scrubber */
+  .app-header .logo {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .app-header nav {
+    order: 5;
+    flex: 1 1 100%;
+    width: 100%;
+    max-width: 100%;
+    margin-left: 0;
+    padding-bottom: 2px;
+    gap: 6px;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x proximity;
+    scrollbar-width: none;
+    border-top: 1px solid var(--border);
+    padding-top: 10px;
+    margin-left: calc(-1 * max(20px, env(safe-area-inset-left)));
+    margin-right: calc(-1 * max(20px, env(safe-area-inset-right)));
+    padding-left: max(20px, env(safe-area-inset-left));
+    padding-right: max(20px, env(safe-area-inset-right));
+  }
+  .app-header nav::-webkit-scrollbar {
+    display: none;
+  }
+  .app-header nav a {
+    scroll-snap-align: start;
+  }
+}
+
+/* iOS Safari: inputs below 16px trigger unwanted zoom-on-focus */
+@media (max-width: 899px) {
+  .field input,
+  .field select,
+  .input,
+  .slider-row .value-edit,
+  .slider-row .value-edit input,
+  .slider-row .value-button {
+    font-size: 16px !important;
+  }
+  .field label {
+    font-size: 14px;
+  }
+
+  .card {
+    padding: 16px 14px;
+  }
+
+  h1 {
+    font-size: clamp(1.375rem, 5.5vw, 1.75rem);
+    line-height: 1.2;
+  }
+  .page-title .subtitle {
+    font-size: 14px;
+    line-height: 1.45;
+  }
+
+  .hero-price-block .price {
+    font-size: clamp(1.5rem, 9vw, 2.125rem);
+  }
+  .explorer-price {
+    font-size: clamp(1.375rem, 8vw, 2rem);
+  }
+}
+
+@media (pointer: coarse) {
+  input[type='range'] {
+    height: 10px;
+    margin: 10px 0;
+  }
+  input[type='range']::-webkit-slider-thumb {
+    width: 28px;
+    height: 28px;
+    margin-top: -1px;
+  }
+  input[type='range']::-moz-range-thumb {
+    width: 28px;
+    height: 28px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-header nav {
+    scroll-behavior: auto;
+  }
 }
 
 /* PDF print mode tweaks (so exported PDFs look clean) */

@@ -159,14 +159,6 @@ export default function ResultsPanel() {
         </div>
       </Card>
 
-      {/* Buyer comfort rules — checks the lender's-max price against 30/30/3 */}
-      <BuyerComfortCard
-        annualIncome={inputs.annualIncome}
-        netWorth={netWorth}
-        homePriceBeingChecked={homePrice}
-        monthlyHousing={breakdown.total}
-      />
-
       {/* What-if price explorer */}
       <AffordabilityExplorer comfortableMax={homePrice} />
 
@@ -187,6 +179,14 @@ export default function ResultsPanel() {
           </div>
         </div>
       </Card>
+
+      {/* Buyer comfort rules — checks the lender's-max price against 30/30/3 */}
+      <BuyerComfortCard
+        annualIncome={inputs.annualIncome}
+        netWorth={netWorth}
+        homePriceBeingChecked={homePrice}
+        monthlyHousing={breakdown.total}
+      />
 
       {/* Health checks */}
       <Card title="Financial health">

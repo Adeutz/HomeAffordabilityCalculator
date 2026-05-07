@@ -27,7 +27,7 @@ export default function BuyerComfortCard({
 
   return (
     <Card title="Buyer comfort (30/30/3 + Net Worth rule)">
-      <div className="flex-between mb-16">
+      <div className="flex-between stack-sm-start mb-16">
         <div className="text-small muted">
           Checked against your lender's-max price of <strong>{money(homePriceBeingChecked)}</strong>.
         </div>

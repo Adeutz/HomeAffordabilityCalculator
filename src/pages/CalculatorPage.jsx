@@ -17,7 +17,7 @@ export default function CalculatorPage() {
         </span>
       </div>
 
-      <div className="row mb-16">
+      <div className="row page-toolbar mb-16">
         <ShareButton inputs={inputs} />
         <ExportPdfButton targetSelector="#calculator-pdf-target" filename="affordability.pdf" />
         <SaveScenarioButton />
