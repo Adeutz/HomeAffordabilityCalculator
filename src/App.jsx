@@ -22,6 +22,14 @@ export default function App() {
     const saved = window.localStorage.getItem(NAV_MINIMIZED_KEY);
     if (saved === 'true') {
       setIsNavMinimized(true);
+      return;
+    }
+    if (saved === null) {
+      const shouldUseCompactNav = window.matchMedia('(max-width: 899px)').matches
+        || window.matchMedia('(pointer: coarse)').matches;
+      if (shouldUseCompactNav) {
+        setIsNavMinimized(true);
+      }
     }
   }, []);
 
@@ -30,7 +38,9 @@ export default function App() {
   }, [isNavMinimized]);
 
   const handleNavLinkClick = () => {
-    if (window.matchMedia('(max-width: 899px)').matches) {
+    const shouldUseCompactNav = window.matchMedia('(max-width: 899px)').matches
+      || window.matchMedia('(pointer: coarse)').matches;
+    if (shouldUseCompactNav) {
       setIsNavMinimized(true);
     }
   };
