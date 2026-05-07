@@ -201,14 +201,17 @@ h4 { font-size: 15px; color: var(--text-muted); font-weight: 600; }
   display: none;
   align-items: center;
   justify-content: center;
+  width: 40px;
+  height: 40px;
   min-height: 40px;
-  padding: 8px 12px;
+  padding: 0;
   border-radius: 999px;
   border: 1px solid var(--border);
   background: var(--bg-card);
   color: var(--text);
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 20px;
+  line-height: 1;
+  font-weight: 500;
   flex-shrink: 0;
 }
 .menu-toggle:hover {

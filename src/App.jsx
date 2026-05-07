@@ -55,8 +55,10 @@ export default function App() {
             onClick={() => setIsNavMinimized((prev) => !prev)}
             aria-expanded={!isNavMinimized}
             aria-controls="app-primary-nav"
+            aria-label={isNavMinimized ? 'Show menu' : 'Hide menu'}
+            title={isNavMinimized ? 'Show menu' : 'Hide menu'}
           >
-            {isNavMinimized ? 'Show menu' : 'Hide menu'}
+            <span aria-hidden="true">{isNavMinimized ? '☰' : '✕'}</span>
           </button>
 
           <nav id="app-primary-nav" className={isNavMinimized ? 'is-minimized' : ''}>
