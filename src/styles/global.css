@@ -998,7 +998,7 @@ th:first-child, td:first-child { text-align: left; }
   }
 }
 
-@media (max-width: 719px) {
+@media (max-width: 899px) {
   .menu-toggle {
     display: inline-flex;
     order: 3;

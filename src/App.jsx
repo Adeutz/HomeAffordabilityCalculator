@@ -30,7 +30,7 @@ export default function App() {
   }, [isNavMinimized]);
 
   const handleNavLinkClick = () => {
-    if (window.matchMedia('(max-width: 719px)').matches) {
+    if (window.matchMedia('(max-width: 899px)').matches) {
       setIsNavMinimized(true);
     }
   };
