@@ -12,8 +12,28 @@ import { useTheme } from './hooks/useTheme.js';
 import InstallPrompt from './components/InstallPrompt.jsx';
 import UpdatePrompt from './components/UpdatePrompt.jsx';
 
+const NAV_MINIMIZED_KEY = 'header-nav-minimized';
+
 export default function App() {
   const { theme, toggle } = useTheme();
+  const [isNavMinimized, setIsNavMinimized] = useState(false);
+
+  useEffect(() => {
+    const saved = window.localStorage.getItem(NAV_MINIMIZED_KEY);
+    if (saved === 'true') {
+      setIsNavMinimized(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem(NAV_MINIMIZED_KEY, isNavMinimized ? 'true' : 'false');
+  }, [isNavMinimized]);
+
+  const handleNavLinkClick = () => {
+    if (window.matchMedia('(max-width: 719px)').matches) {
+      setIsNavMinimized(true);
+    }
+  };
 
   return (
     <InputsProvider>
@@ -30,14 +50,23 @@ export default function App() {
             <span>Affordability</span>
           </div>
 
-          <nav>
-            <NavLink to="/" end>Calculator</NavLink>
-            <NavLink to="/compare">Compare loans</NavLink>
-            <NavLink to="/amortization">Amortization</NavLink>
-            <NavLink to="/stress">Stress test</NavLink>
-            <NavLink to="/scenarios">Scenarios</NavLink>
-            <NavLink to="/savings-goal">Savings goal</NavLink>
-            <NavLink to="/rent-vs-buy">Rent vs buy</NavLink>
+          <button
+            className="menu-toggle"
+            onClick={() => setIsNavMinimized((prev) => !prev)}
+            aria-expanded={!isNavMinimized}
+            aria-controls="app-primary-nav"
+          >
+            {isNavMinimized ? 'Show menu' : 'Hide menu'}
+          </button>
+
+          <nav id="app-primary-nav" className={isNavMinimized ? 'is-minimized' : ''}>
+            <NavLink to="/" end onClick={handleNavLinkClick}>Calculator</NavLink>
+            <NavLink to="/compare" onClick={handleNavLinkClick}>Compare loans</NavLink>
+            <NavLink to="/amortization" onClick={handleNavLinkClick}>Amortization</NavLink>
+            <NavLink to="/stress" onClick={handleNavLinkClick}>Stress test</NavLink>
+            <NavLink to="/scenarios" onClick={handleNavLinkClick}>Scenarios</NavLink>
+            <NavLink to="/savings-goal" onClick={handleNavLinkClick}>Savings goal</NavLink>
+            <NavLink to="/rent-vs-buy" onClick={handleNavLinkClick}>Rent vs buy</NavLink>
           </nav>
 
           <div className="spacer" />

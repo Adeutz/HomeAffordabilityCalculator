@@ -197,6 +197,25 @@ h4 { font-size: 15px; color: var(--text-muted); font-weight: 600; }
 
 .app-header .spacer { flex: 1; }
 
+.menu-toggle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.menu-toggle:hover {
+  background: var(--bg-soft);
+  border-color: var(--border-strong);
+}
+
 .icon-button {
   display: inline-flex;
   align-items: center;
@@ -977,6 +996,10 @@ th:first-child, td:first-child { text-align: left; }
 }
 
 @media (max-width: 719px) {
+  .menu-toggle {
+    display: inline-flex;
+    order: 3;
+  }
   .app-header .spacer {
     display: none;
   }
@@ -1011,6 +1034,9 @@ th:first-child, td:first-child { text-align: left; }
   }
   .app-header nav a {
     scroll-snap-align: start;
+  }
+  .app-header nav.is-minimized {
+    display: none;
   }
 }
 
