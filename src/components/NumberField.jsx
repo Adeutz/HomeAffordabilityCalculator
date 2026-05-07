@@ -18,6 +18,15 @@ export default function NumberField({
   placeholder,
   allowEmpty = false,
 }) {
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      e.currentTarget.blur();
+    }
+  };
+
+  const inputMode = type === 'number' ? 'decimal' : undefined;
+
   const handle = (e) => {
     const v = e.target.value;
     if (type === 'number') {
@@ -41,6 +50,9 @@ export default function NumberField({
             type={type}
             value={value}
             onChange={handle}
+            onKeyDown={handleKeyDown}
+            inputMode={inputMode}
+            enterKeyHint="done"
             step={step}
             min={min}
             max={max}
@@ -53,6 +65,9 @@ export default function NumberField({
           type={type}
           value={value}
           onChange={handle}
+          onKeyDown={handleKeyDown}
+          inputMode={inputMode}
+          enterKeyHint="done"
           step={step}
           min={min}
           max={max}

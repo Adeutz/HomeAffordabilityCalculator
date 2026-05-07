@@ -116,12 +116,20 @@ export default function AmortizationPage() {
           <input
             className="input"
             type="number"
+            inputMode="decimal"
+            enterKeyHint="done"
             min={0}
             step={25}
             value={inputs.extraMonthlyPrincipal}
             onChange={(e) =>
               update({ extraMonthlyPrincipal: Number(e.target.value) || 0 })
             }
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                e.currentTarget.blur();
+              }
+            }}
             style={{ width: 120 }}
           />
           {inputs.extraMonthlyPrincipal > 0 ? (

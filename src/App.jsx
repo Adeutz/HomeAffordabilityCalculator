@@ -11,6 +11,7 @@ import { InputsProvider } from './state/InputsContext.jsx';
 import { useTheme } from './hooks/useTheme.js';
 import InstallPrompt from './components/InstallPrompt.jsx';
 import UpdatePrompt from './components/UpdatePrompt.jsx';
+import KeyboardDoneButton from './components/KeyboardDoneButton.jsx';
 
 const NAV_MINIMIZED_KEY = 'header-nav-minimized';
 
@@ -116,6 +117,7 @@ export default function App() {
 
         <InstallPrompt />
         <UpdatePrompt />
+        <KeyboardDoneButton />
       </div>
     </InputsProvider>
   );
