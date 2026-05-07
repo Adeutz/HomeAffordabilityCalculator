@@ -135,21 +135,78 @@ h4 { font-size: 15px; color: var(--text-muted); font-weight: 600; }
 .app {
   min-height: 100dvh;
   display: flex;
+  align-items: stretch;
+}
+
+.app-sidebar {
+  width: 260px;
+  flex-shrink: 0;
+  background: var(--bg-card);
+  border-right: 1px solid var(--border);
+  padding: max(12px, env(safe-area-inset-top)) 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 100dvh;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+.sidebar-brand {
+  padding: 4px 8px;
+}
+
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sidebar-nav a {
+  padding: 10px 12px;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  border-radius: 10px;
+  color: var(--text-muted);
+  font-weight: 500;
+  font-size: 15px;
+}
+
+.sidebar-nav a:hover {
+  background: var(--bg-soft);
+  color: var(--text);
+  text-decoration: none;
+}
+
+.sidebar-nav a.active {
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+
+.sidebar-overlay {
+  display: none;
+}
+
+.app-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
   flex-direction: column;
 }
 
 .app-header {
   position: sticky;
   top: 0;
-  z-index: 10;
+  z-index: 15;
   background: var(--bg-card);
   border-bottom: 1px solid var(--border);
-  padding: max(12px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right))
-    12px max(20px, env(safe-area-inset-left));
+  padding: max(10px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right))
+    10px max(20px, env(safe-area-inset-left));
   display: flex;
   align-items: center;
-  gap: 16px;
-  flex-wrap: wrap;
+  gap: 12px;
   backdrop-filter: saturate(140%) blur(10px);
   -webkit-backdrop-filter: saturate(140%) blur(10px);
 }
@@ -166,39 +223,14 @@ h4 { font-size: 15px; color: var(--text-muted); font-weight: 600; }
   width: 28px;
   height: 28px;
 }
-
-.app-header nav {
-  display: flex;
-  gap: 4px;
-  flex-wrap: wrap;
-  margin-left: 8px;
-  touch-action: manipulation;
-}
-.app-header nav a {
-  padding: 8px 12px;
-  min-height: 44px;
-  display: inline-flex;
-  align-items: center;
-  border-radius: 999px;
-  color: var(--text-muted);
-  font-weight: 500;
-  font-size: 14px;
-  flex-shrink: 0;
-}
-.app-header nav a:hover {
-  background: var(--bg-soft);
-  color: var(--text);
-  text-decoration: none;
-}
-.app-header nav a.active {
-  background: var(--brand-soft);
-  color: var(--brand);
+.app-header .logo.compact {
+  display: none;
 }
 
 .app-header .spacer { flex: 1; }
 
 .menu-toggle {
-  display: none;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 40px;
@@ -1017,47 +1049,54 @@ th:first-child, td:first-child { text-align: left; }
 }
 
 @media (max-width: 899px), (pointer: coarse) {
-  .menu-toggle {
-    display: inline-flex;
-    order: 3;
+  .app-sidebar {
+    position: fixed;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: min(82vw, 320px);
+    min-height: 100dvh;
+    transform: translateX(-105%);
+    transition: transform 180ms ease;
+    box-shadow: 0 24px 48px rgba(0, 0, 0, 0.4);
   }
+
+  .app.sidebar-mobile-open .app-sidebar {
+    transform: translateX(0);
+  }
+
+  .sidebar-overlay {
+    position: fixed;
+    inset: 0;
+    display: block;
+    background: rgba(0, 0, 0, 0.35);
+    z-index: 19;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 150ms ease;
+  }
+
+  .app.sidebar-mobile-open .sidebar-overlay {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .app-header .logo.compact {
+    display: flex;
+  }
+
   .app-header .spacer {
-    display: none;
+    display: flex;
   }
-  /* Row 1: logo + theme. Row 2: full-width horizontal nav scrubber */
-  .app-header .logo {
-    flex: 1 1 auto;
-    min-width: 0;
-  }
-  .app-header nav {
-    order: 5;
-    flex: 1 1 100%;
-    width: 100%;
-    max-width: 100%;
-    margin-left: 0;
-    padding-bottom: 2px;
-    gap: 6px;
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    overflow-y: hidden;
-    -webkit-overflow-scrolling: touch;
-    scroll-snap-type: x proximity;
-    scrollbar-width: none;
-    border-top: 1px solid var(--border);
-    padding-top: 10px;
-    margin-left: calc(-1 * max(20px, env(safe-area-inset-left)));
-    margin-right: calc(-1 * max(20px, env(safe-area-inset-right)));
-    padding-left: max(20px, env(safe-area-inset-left));
-    padding-right: max(20px, env(safe-area-inset-right));
-  }
-  .app-header nav::-webkit-scrollbar {
-    display: none;
-  }
-  .app-header nav a {
-    scroll-snap-align: start;
-  }
-  .app-header nav.is-minimized {
-    display: none;
+}
+
+@media (min-width: 900px) {
+  .app.sidebar-collapsed .app-sidebar {
+    width: 0;
+    padding-left: 0;
+    padding-right: 0;
+    border-right: 0;
+    overflow: hidden;
   }
 }
 
