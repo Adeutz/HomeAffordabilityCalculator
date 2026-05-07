@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import Card from './Card.jsx';
 import Slider from './Slider.jsx';
 import { useInputs } from '../state/InputsContext.jsx';
@@ -9,29 +9,18 @@ import {
 } from '../lib/mortgage.js';
 import { money, percentFromRatio } from '../lib/format.js';
 
-// "What if I bought a house at THIS price?" — a Zillow-style price slider
-// that lets the user explore prices above/below their comfortable max and
-// see, in real time, how stretched their budget would be.
+// "What if I bought a house at THIS price?" — pick the home price you're
+// planning on; ResultsPanel lifts this value so every number on the right
+// (payments, charts, health checks) uses the same planned price at once.
 //
-// We keep the explored price in local state (not in the global inputs
-// context) because it doesn't change the user's situation — it's purely a
-// what-if. When the underlying inputs change in a way that shifts the
-// comfortable max, we resync to the new max so the slider always starts
-// "centered" on a reasonable number.
-export default function AffordabilityExplorer({ comfortableMax }) {
+// `lenderMaxPrice` anchors the slider's "Lender max" tick and scales the
+// %-of-max hint; it resets when incomes/debts change (handled by the parent).
+export default function AffordabilityExplorer({
+  lenderMaxPrice,
+  scenarioPrice,
+  onScenarioPriceChange,
+}) {
   const { inputs } = useInputs();
-
-  const [exploredPrice, setExploredPrice] = useState(comfortableMax);
-  // Track the last comfortableMax we synced to. When it changes (because the
-  // user moved a slider in "Your situation"), reset the explored price.
-  const [lastSyncedMax, setLastSyncedMax] = useState(comfortableMax);
-
-  useEffect(() => {
-    if (Math.abs(comfortableMax - lastSyncedMax) > 1) {
-      setExploredPrice(comfortableMax);
-      setLastSyncedMax(comfortableMax);
-    }
-  }, [comfortableMax, lastSyncedMax]);
 
   // Slider range. We lock it (noStretch) so the "Comfortable max" marker
   // can be precisely positioned without the scale shifting underneath it.
@@ -42,27 +31,27 @@ export default function AffordabilityExplorer({ comfortableMax }) {
     return Math.max(50_000, Math.floor(inputs.downPayment / 10_000) * 10_000);
   }, [inputs.downPayment]);
   const sliderMax = useMemo(() => {
-    // 2x comfortable max gives a clear "very aggressive" zone past the marker.
-    return Math.max(comfortableMax * 2, sliderMin + 200_000);
-  }, [comfortableMax, sliderMin]);
+    // 2× lender max gives a clear "very aggressive" zone past the marker.
+    return Math.max(lenderMaxPrice * 2, sliderMin + 200_000);
+  }, [lenderMaxPrice, sliderMin]);
 
   // Clamp the slider's visual value so it never overflows the locked range.
   // (If the user types a number past the range, the typed value still shows
   // in the editable number above; the slider thumb just pins to the edge.)
-  const sliderValue = Math.min(sliderMax, Math.max(sliderMin, exploredPrice));
+  const sliderValue = Math.min(sliderMax, Math.max(sliderMin, scenarioPrice));
 
   const {
     breakdown,
     closingCosts,
     comfort,
-    pctOfComfortableMax,
+    pctOfLenderMax,
   } = useMemo(() => {
     const breakdown = monthlyPaymentBreakdown({
       ...inputs,
-      homePrice: exploredPrice,
+      homePrice: scenarioPrice,
     });
     const closingCosts = estimateClosingCosts(
-      exploredPrice,
+      scenarioPrice,
       inputs.closingCostsPct,
     );
     const comfort = affordabilityComfort({
@@ -70,11 +59,11 @@ export default function AffordabilityExplorer({ comfortableMax }) {
       monthlyDebts: inputs.monthlyDebts,
       annualIncome: inputs.annualIncome,
     });
-    const pctOfComfortableMax =
-      comfortableMax > 0 ? exploredPrice / comfortableMax : 0;
+    const pctOfLenderMax =
+      lenderMaxPrice > 0 ? scenarioPrice / lenderMaxPrice : 0;
 
-    return { breakdown, closingCosts, comfort, pctOfComfortableMax };
-  }, [exploredPrice, inputs, comfortableMax]);
+    return { breakdown, closingCosts, comfort, pctOfLenderMax };
+  }, [scenarioPrice, inputs, lenderMaxPrice]);
 
   // Position of the "Comfortable max" marker on the slider track, as a
   // percentage of the locked slider range. Because the slider doesn't
@@ -82,8 +71,8 @@ export default function AffordabilityExplorer({ comfortableMax }) {
   const comfortableMarkerPct = useMemo(() => {
     const denom = sliderMax - sliderMin;
     if (denom <= 0) return 0;
-    return Math.max(0, Math.min(1, (comfortableMax - sliderMin) / denom)) * 100;
-  }, [comfortableMax, sliderMin, sliderMax]);
+    return Math.max(0, Math.min(1, (lenderMaxPrice - sliderMin) / denom)) * 100;
+  }, [lenderMaxPrice, sliderMin, sliderMax]);
 
   // Compute a single 0..1 "stress" number that reflects which comfort zone
   // we're in AND how deep we are within it. Mapping it onto the green /
@@ -117,11 +106,11 @@ export default function AffordabilityExplorer({ comfortableMax }) {
     <Card title="What if I bought a home at this price?">
       <div className="explorer-head">
         <div>
-          <div className="text-small muted">Exploring a home price of</div>
-          <div className="explorer-price">{money(exploredPrice)}</div>
+          <div className="text-small muted">Planned home price</div>
+          <div className="explorer-price">{money(scenarioPrice)}</div>
           <div className="text-tiny muted">
-            {pctOfComfortableMax > 0
-              ? `${(pctOfComfortableMax * 100).toFixed(0)}% of your comfortable max (${money(comfortableMax)})`
+            {pctOfLenderMax > 0
+              ? `${(pctOfLenderMax * 100).toFixed(0)}% of lender's max home price (${money(lenderMaxPrice)})`
               : ''}
           </div>
         </div>
@@ -135,22 +124,21 @@ export default function AffordabilityExplorer({ comfortableMax }) {
         <Slider
           label="Home price"
           value={sliderValue}
-          onChange={setExploredPrice}
+          onChange={onScenarioPriceChange}
           min={sliderMin}
           max={sliderMax}
           step={1_000}
           noStretch
         />
-        {/* A labeled tick that floats below the slider track at the exact
-            position of the user's "comfortable max" — so they can see at a
-            glance how far they've pushed past it (or pulled back from it). */}
+        {/* Tick at the lender's DTI ceiling so you see how far above/below
+            you'd be vs what a bank might approve — not a "comfortability" guarantee. */}
         <div
           className="comfortable-marker"
           style={{ left: `${comfortableMarkerPct}%` }}
-          title={`Comfortable max: ${money(comfortableMax)}`}
+          title={`Lender max home price (DTI ceiling): ${money(lenderMaxPrice)}`}
         >
           <span className="marker-tick" />
-          <span className="marker-label">Comfortable max</span>
+          <span className="marker-label">Max home price</span>
         </div>
       </div>
 

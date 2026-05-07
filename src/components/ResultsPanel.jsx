@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Card from './Card.jsx';
 import PaymentPieChart, { PIE_COLORS } from './PaymentPieChart.jsx';
 import EquityLineChart from './EquityLineChart.jsx';
@@ -23,22 +23,13 @@ import { money } from '../lib/format.js';
 export default function ResultsPanel() {
   const { inputs } = useInputs();
 
-  const {
-    homePrice,
-    breakdown,
-    closingCosts,
-    monthlyHousing,
-    equityData,
-    netWorth,
-    comfort,
-    comfortablePrice,
-  } = useMemo(() => {
+  const { lenderMaxPrice, comfortablePrice, netWorth } = useMemo(() => {
     const maxMonthlyHousingPayment = maxMonthlyHousingFromIncome({
       annualIncome: inputs.annualIncome,
       monthlyDebts: inputs.monthlyDebts,
     });
 
-    const homePrice = maxAffordableHomePrice({
+    const lenderMaxPrice = maxAffordableHomePrice({
       maxMonthlyHousingPayment,
       downPayment: inputs.downPayment,
       interestRate: inputs.interestRate,
@@ -49,65 +40,100 @@ export default function ResultsPanel() {
       creditScore: inputs.creditScore,
     });
 
-    const breakdown = monthlyPaymentBreakdown({
-      ...inputs,
-      homePrice,
+    const nw = Number(inputs.totalNetWorth) || inputs.currentSavings;
+    const comfort = comfortAnalysis({
+      annualIncome: inputs.annualIncome,
+      netWorth: nw,
+      homePriceBeingChecked: lenderMaxPrice,
+      monthlyHousing: 0,
     });
 
-    const closingCosts = estimateClosingCosts(homePrice, inputs.closingCostsPct);
+    const comfortablePrice = Math.max(0, comfort.idealMax);
+
+    return { lenderMaxPrice, comfortablePrice, netWorth: nw };
+  }, [inputs]);
+
+  const lenderBreakdownMonthly = useMemo(() => {
+    return monthlyPaymentBreakdown({
+      ...inputs,
+      homePrice: lenderMaxPrice,
+    }).total;
+  }, [inputs, lenderMaxPrice]);
+
+  const lenderMaxLoanAmount = Math.max(0, lenderMaxPrice - inputs.downPayment);
+
+  // Planned purchase price drives every figure on this column; when income or
+  // debts change the DTI ceiling, snap back so the slider matches the lender max.
+  const [scenarioPrice, setScenarioPrice] = useState(null);
+  const [lastSyncedLenderMax, setLastSyncedLenderMax] = useState(null);
+
+  useEffect(() => {
+    if (
+      lastSyncedLenderMax == null ||
+      Math.abs(lenderMaxPrice - lastSyncedLenderMax) > 1
+    ) {
+      setScenarioPrice(lenderMaxPrice);
+      setLastSyncedLenderMax(lenderMaxPrice);
+    }
+  }, [lenderMaxPrice, lastSyncedLenderMax]);
+
+  const purchasePrice = scenarioPrice ?? lenderMaxPrice;
+
+  const { breakdown, closingCosts, monthlyHousing, equityData } = useMemo(() => {
+    const breakdown = monthlyPaymentBreakdown({
+      ...inputs,
+      homePrice: purchasePrice,
+    });
+
+    const closingCosts = estimateClosingCosts(
+      purchasePrice,
+      inputs.closingCostsPct,
+    );
 
     const schedule = amortizationSchedule({
-      loanAmount: Math.max(0, homePrice - inputs.downPayment),
+      loanAmount: Math.max(0, purchasePrice - inputs.downPayment),
       annualRatePct: inputs.interestRate,
       termYears: inputs.loanTermYears,
       extraMonthlyPrincipal: inputs.extraMonthlyPrincipal,
     });
 
     const equityData = equityOverTime({
-      homePrice,
+      homePrice: purchasePrice,
       downPayment: inputs.downPayment,
       schedule,
       annualAppreciationPct: inputs.annualHomeAppreciationPct,
     });
 
-    // Net worth comes from its own dedicated slider now. Coerce just in case
-    // someone has an old saved value lying around.
-    const netWorth = Number(inputs.totalNetWorth) || inputs.currentSavings;
-
-    const comfort = comfortAnalysis({
-      annualIncome: inputs.annualIncome,
-      netWorth,
-      homePriceBeingChecked: homePrice,
-      monthlyHousing: breakdown.total,
-    });
-
-    // The "comfortable target" we surface in the hero is the IDEAL tier
-    // (3x income AND 30% of home in net worth). It's what financial advisors
-    // actually recommend.
-    const comfortablePrice = Math.max(0, comfort.idealMax);
-
     return {
-      homePrice,
       breakdown,
       closingCosts,
       monthlyHousing: breakdown.total,
       equityData,
-      netWorth,
-      comfort,
-      comfortablePrice,
     };
-  }, [inputs]);
+  }, [inputs, purchasePrice]);
 
   return (
     <div>
+      {/* Set planned home price first — everything below matches this */}
+      <AffordabilityExplorer
+        lenderMaxPrice={lenderMaxPrice}
+        scenarioPrice={purchasePrice}
+        onScenarioPriceChange={setScenarioPrice}
+      />
+
       {/* Hero numbers — TWO prices, side by side: lender's max vs comfortable */}
       <Card>
         <div className="hero-prices">
           <div className="hero-price-block stretch">
-            <div className="label">Lender's max (28/36 DTI)</div>
-            <div className="price">{money(homePrice)}</div>
+            <div className="label">Lender's max home price (28/36 DTI)</div>
+            <div className="price">{money(lenderMaxPrice)}</div>
             <div className="sub">
-              What banks will let you do — based on a {money(monthlyHousing)} monthly payment.
+              Highest purchase price lenders often use with these rules — the
+              sticker price on the whole house, not your loan balance. Here your
+              loan would be about {money(lenderMaxLoanAmount)} (that price minus your
+              down payment), which works out to about {money(lenderBreakdownMonthly)}{' '}
+              a month altogether (your mortgage payment, property taxes, homeowner's
+              insurance{inputs.hoaMonthly > 0 ? ', and HOA' : ''}).
             </div>
           </div>
 
@@ -119,31 +145,39 @@ export default function ResultsPanel() {
               className="price"
               style={{
                 color:
-                  comfortablePrice < homePrice ? 'var(--green)' : 'var(--brand)',
+                  comfortablePrice < lenderMaxPrice ? 'var(--green)' : 'var(--brand)',
               }}
             >
               {money(comfortablePrice)}
             </div>
             <div className="sub">
-              {comfortablePrice < homePrice
-                ? `~${((comfortablePrice / Math.max(1, homePrice)) * 100).toFixed(0)}% of the lender's max — what financial advisors actually recommend.`
-                : 'Your situation is comfortable even at the lender\'s max — nice.'}
+              {comfortablePrice < lenderMaxPrice
+                ? `~${((comfortablePrice / Math.max(1, lenderMaxPrice)) * 100).toFixed(0)}% of the lender's max home price — what financial advisors actually recommend.`
+                : 'Your situation is comfortable even at the lender\'s max home price — nice.'}
             </div>
           </div>
+        </div>
+
+        <div className="text-small muted mt-16 mb-12">
+          Below uses your planned home price{' '}
+          <strong>{money(purchasePrice)}</strong>.{' '}
+          {purchasePrice !== lenderMaxPrice
+            ? 'Move the slider above to change it.'
+            : '(same as lender max home price above — slide to try a cheaper or costlier house).'}
         </div>
 
         <div className="stat-grid mt-16">
           <div className="stat">
             <div className="label">Loan amount</div>
-            <div className="value">{money(homePrice - inputs.downPayment)}</div>
+            <div className="value">{money(purchasePrice - inputs.downPayment)}</div>
           </div>
           <div className="stat">
             <div className="label">Down payment</div>
             <div className="value">
               {money(inputs.downPayment)}
               <div className="text-tiny muted" style={{ fontWeight: 500 }}>
-                {homePrice > 0
-                  ? `${((inputs.downPayment / homePrice) * 100).toFixed(1)}% of price`
+                {purchasePrice > 0
+                  ? `${((inputs.downPayment / purchasePrice) * 100).toFixed(1)}% of price`
                   : ''}
               </div>
             </div>
@@ -158,9 +192,6 @@ export default function ResultsPanel() {
           </div>
         </div>
       </Card>
-
-      {/* What-if price explorer */}
-      <AffordabilityExplorer comfortableMax={homePrice} />
 
       {/* Monthly breakdown */}
       <Card title="Monthly payment breakdown">
@@ -180,11 +211,11 @@ export default function ResultsPanel() {
         </div>
       </Card>
 
-      {/* Buyer comfort rules — checks the lender's-max price against 30/30/3 */}
+      {/* Buyer comfort rules — checks the planned price against 30/30/3 */}
       <BuyerComfortCard
         annualIncome={inputs.annualIncome}
         netWorth={netWorth}
-        homePriceBeingChecked={homePrice}
+        homePriceBeingChecked={purchasePrice}
         monthlyHousing={breakdown.total}
       />
 
