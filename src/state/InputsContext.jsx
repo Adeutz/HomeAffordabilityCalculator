@@ -10,6 +10,7 @@ import { readSharedFromHash } from '../lib/shareLink.js';
 const InputsContext = createContext(null);
 
 export function InputsProvider({ children }) {
+  const [activeScenarioId, setActiveScenarioId] = useState(null);
   const [inputs, setInputs] = useState(() => {
     // Priority order:
     //   1. URL share link (someone sent us a scenario)
@@ -34,11 +35,21 @@ export function InputsProvider({ children }) {
   // consistent.
   const update = (patch) => setInputs((prev) => applyCascades(prev, patch));
 
-  const reset = () => setInputs(DEFAULT_INPUTS);
+  const reset = () => {
+    setActiveScenarioId(null);
+    setInputs(DEFAULT_INPUTS);
+  };
 
   const value = useMemo(
-    () => ({ inputs, setInputs, update, reset }),
-    [inputs]
+    () => ({
+      inputs,
+      setInputs,
+      update,
+      reset,
+      activeScenarioId,
+      setActiveScenarioId,
+    }),
+    [inputs, activeScenarioId]
   );
 
   return (

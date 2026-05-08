@@ -7,10 +7,9 @@ const COPY = {
   red: 'Risky. After closing you\'d have less than 1 month of expenses in savings.',
 };
 
-export default function EmergencyFundCheck(props) {
+export default function EmergencyFundCheck({ extraSavingsNeeded, ...props }) {
   const result = emergencyFundCheck(props);
   const months = result.monthsCovered;
-  // Cap the bar at 6 months for visual purposes
   const widthPct = Math.min(100, (months / 6) * 100);
 
   return (
@@ -41,6 +40,11 @@ export default function EmergencyFundCheck(props) {
         Cash left after down payment + closing: <strong>{money(result.remainingSavings)}</strong>.
         Aim for at least {money(result.recommended3mo)} (3 months) — ideally {money(result.recommended6mo)} (6 months).
       </div>
+      {result.level !== 'green' && extraSavingsNeeded > 0 && (
+        <div className="indicator-hint">
+          Save ~{money(extraSavingsNeeded)} more before buying to keep a healthy 3-month emergency fund. (Adding more down payment makes this worse — you need more total savings.)
+        </div>
+      )}
     </div>
   );
 }

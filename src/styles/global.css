@@ -886,6 +886,22 @@ input[type='range']::-moz-range-thumb {
   color: var(--text-muted);
   font-size: 13px;
 }
+.indicator-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 7px 10px;
+  background: var(--brand-soft);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--brand-strong);
+  line-height: 1.4;
+}
+.indicator-hint.impossible {
+  background: var(--yellow-soft);
+  color: var(--yellow);
+}
 
 /* ----------------------------------------------------------------------
    Tables

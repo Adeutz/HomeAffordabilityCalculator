@@ -23,6 +23,7 @@ export default function NetIncomeIndicator({
   stateAbbrev,
   filingStatus,
   overridePct,
+  extraDownPaymentNeeded,
 }) {
   const tax = estimateNet({
     grossAnnual: annualIncome,
@@ -79,6 +80,19 @@ export default function NetIncomeIndicator({
           <strong>Housing + debts:</strong> {percentFromRatio(totalRatio, 1)} of net
         </span>
       </div>
+      {level !== 'green' && (
+        extraDownPaymentNeeded === null
+          ? (
+            <div className="indicator-hint impossible">
+              Even paying all cash, housing costs at this price exceed 30% of take-home — consider a less expensive home.
+            </div>
+          )
+          : extraDownPaymentNeeded > 0 && (
+            <div className="indicator-hint">
+              Add ~{money(extraDownPaymentNeeded)} more to your down payment to reach Healthy (&le;30% of take-home).
+            </div>
+          )
+      )}
     </div>
   );
 }

@@ -39,7 +39,7 @@ function summarize(inputs) {
 
 export default function ScenariosPage() {
   const [scenarios, setScenarios] = useState(() => load(KEYS.scenarios, []));
-  const { setInputs } = useInputs();
+  const { setInputs, setActiveScenarioId } = useInputs();
   const nav = useNavigate();
 
   const sorted = useMemo(
@@ -54,6 +54,7 @@ export default function ScenariosPage() {
   };
 
   const loadScenario = (s) => {
+    setActiveScenarioId(s.id);
     setInputs(s.inputs);
     nav('/');
   };
