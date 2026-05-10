@@ -34,4 +34,6 @@ export const KEYS = {
   inputs: 'inputs',
   scenarios: 'scenarios',
   theme: 'theme',
+  /** Keeps planned home price from snapping to lender max when situation sliders move */
+  stickyPlannedPrice: 'stickyPlannedPrice',
 };

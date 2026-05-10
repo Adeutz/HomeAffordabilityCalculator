@@ -19,6 +19,8 @@ export default function AffordabilityExplorer({
   lenderMaxPrice,
   scenarioPrice,
   onScenarioPriceChange,
+  stickyPlannedPrice,
+  onStickyPlannedPriceChange,
 }) {
   const { inputs } = useInputs();
 
@@ -119,6 +121,19 @@ export default function AffordabilityExplorer({
           {comfort.label}
         </span>
       </div>
+
+      <label className="explorer-sticky-opt text-small muted">
+        <input
+          type="checkbox"
+          checked={!!stickyPlannedPrice}
+          onChange={(e) => onStickyPlannedPriceChange(e.target.checked)}
+        />
+        <span>
+          Lock planned price when I change{' '}
+          <strong className="text-small">Your situation</strong>{' '}
+          <span className="text-tiny">(won&apos;t chase lender max)</span>
+        </span>
+      </label>
 
       <div className="explorer-slider">
         <Slider

@@ -824,6 +824,22 @@ input[type='range']::-moz-range-thumb {
   flex-wrap: wrap;
   margin-bottom: 8px;
 }
+
+.explorer-sticky-opt {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+  margin: 6px 0 8px;
+  line-height: 1.45;
+  touch-action: manipulation;
+}
+.explorer-sticky-opt input {
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  flex-shrink: 0;
+}
 .explorer-price {
   font-size: 32px;
   font-weight: 700;

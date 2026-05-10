@@ -22,6 +22,8 @@ export default function ResultsPanel({ scenario }) {
     lenderMaxLoanAmount,
     purchasePrice,
     setScenarioPrice,
+    stickyPlannedPrice,
+    setStickyPlannedPrice,
     breakdown,
     closingCosts,
     equityData,
@@ -34,6 +36,8 @@ export default function ResultsPanel({ scenario }) {
         lenderMaxPrice={lenderMaxPrice}
         scenarioPrice={purchasePrice}
         onScenarioPriceChange={setScenarioPrice}
+        stickyPlannedPrice={stickyPlannedPrice}
+        onStickyPlannedPriceChange={setStickyPlannedPrice}
       />
 
       {/* Hero numbers — TWO prices, side by side: lender's max vs comfortable */}
@@ -126,12 +130,16 @@ export default function ResultsPanel({ scenario }) {
         </div>
       </Card>
 
-      {/* Buyer comfort rules — checks the planned price against 30/30/3 */}
+      {/* Buyer comfort rules — 30/30/3 (+ NW); third rule uses loan + annual tax & insurance */}
       <BuyerComfortCard
+        solverInputs={inputs}
         annualIncome={inputs.annualIncome}
         netWorth={netWorth}
         homePriceBeingChecked={purchasePrice}
         monthlyHousing={breakdown.total}
+        downPayment={inputs.downPayment}
+        propertyTaxRatePct={inputs.propertyTaxRatePct}
+        homeInsuranceAnnual={inputs.homeInsuranceAnnual}
       />
 
       {/* Health checks */}

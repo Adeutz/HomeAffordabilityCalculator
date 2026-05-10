@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useInputs } from '../state/InputsContext.jsx';
+import { load, save, KEYS } from '../lib/storage.js';
 import { estimateNet } from '../lib/taxes.js';
 import {
   maxAffordableHomePrice,
@@ -47,6 +48,9 @@ export function useCalculatorScenario() {
       netWorth: nw,
       homePriceBeingChecked: lenderMaxPrice,
       monthlyHousing: 0,
+      downPayment: inputs.downPayment,
+      propertyTaxRatePct: inputs.propertyTaxRatePct,
+      homeInsuranceAnnual: inputs.homeInsuranceAnnual,
     });
 
     const comfortablePrice = Math.max(0, comfort.idealMax);
@@ -66,7 +70,26 @@ export function useCalculatorScenario() {
   const [scenarioPrice, setScenarioPrice] = useState(null);
   const [lastSyncedLenderMax, setLastSyncedLenderMax] = useState(null);
 
+  const [stickyPlannedPrice, setStickyPlannedPriceState] = useState(() =>
+    !!load(KEYS.stickyPlannedPrice, false),
+  );
+
+  const setStickyPlannedPrice = useCallback((next) => {
+    const bool =
+      typeof next === 'function'
+        ? next(stickyPlannedPrice)
+        : Boolean(next);
+    setStickyPlannedPriceState(bool);
+    save(KEYS.stickyPlannedPrice, bool);
+    // Turning lock off: behave like today's default — hug lender max again.
+    if (!bool && lenderMaxPrice >= 0) {
+      setScenarioPrice(lenderMaxPrice);
+      setLastSyncedLenderMax(lenderMaxPrice);
+    }
+  }, [stickyPlannedPrice, lenderMaxPrice]);
+
   useEffect(() => {
+    if (stickyPlannedPrice) return;
     if (
       lastSyncedLenderMax == null ||
       Math.abs(lenderMaxPrice - lastSyncedLenderMax) > 1
@@ -74,7 +97,7 @@ export function useCalculatorScenario() {
       setScenarioPrice(lenderMaxPrice);
       setLastSyncedLenderMax(lenderMaxPrice);
     }
-  }, [lenderMaxPrice, lastSyncedLenderMax]);
+  }, [lenderMaxPrice, lastSyncedLenderMax, stickyPlannedPrice]);
 
   const purchasePrice = scenarioPrice ?? lenderMaxPrice;
 
@@ -129,6 +152,9 @@ export function useCalculatorScenario() {
       netWorth,
       homePriceBeingChecked: purchasePrice,
       monthlyHousing: mh,
+      downPayment: inputs.downPayment,
+      propertyTaxRatePct: inputs.propertyTaxRatePct,
+      homeInsuranceAnnual: inputs.homeInsuranceAnnual,
     }).overallLevel;
 
     const totalDti = dtiHealth({
@@ -199,6 +225,8 @@ export function useCalculatorScenario() {
     lenderMaxLoanAmount,
     purchasePrice,
     setScenarioPrice,
+    stickyPlannedPrice,
+    setStickyPlannedPrice,
     breakdown,
     closingCosts,
     monthlyHousing,
