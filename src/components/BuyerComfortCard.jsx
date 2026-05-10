@@ -26,7 +26,7 @@ export default function BuyerComfortCard({
         : 'House poor risk';
 
   return (
-    <Card title="Buyer comfort (30/30/3 + Net Worth rule)">
+    <Card id="health-detail-buyer-rules" title="Buyer comfort (30/30/3 + Net Worth rule)">
       <div className="flex-between stack-sm-start mb-16">
         <div className="text-small muted">
           Checked against your lender's-max <strong>home price</strong> of{' '}

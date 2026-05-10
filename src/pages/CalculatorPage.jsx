@@ -1,12 +1,15 @@
 import { useInputs } from '../state/InputsContext.jsx';
 import InputsPanel from '../components/InputsPanel.jsx';
 import ResultsPanel from '../components/ResultsPanel.jsx';
+import CalculatorHealthLights from '../components/CalculatorHealthLights.jsx';
 import ShareButton from '../components/ShareButton.jsx';
 import ExportPdfButton from '../components/ExportPdfButton.jsx';
 import SaveScenarioButton from '../components/SaveScenarioButton.jsx';
+import { useCalculatorScenario } from '../hooks/useCalculatorScenario.js';
 
 export default function CalculatorPage() {
   const { inputs } = useInputs();
+  const scenario = useCalculatorScenario();
 
   return (
     <div>
@@ -23,9 +26,11 @@ export default function CalculatorPage() {
         <SaveScenarioButton />
       </div>
 
+      <CalculatorHealthLights healthLevels={scenario.healthLevels} />
+
       <div id="calculator-pdf-target" className="grid grid-calculator">
         <InputsPanel />
-        <ResultsPanel />
+        <ResultsPanel scenario={scenario} />
       </div>
     </div>
   );

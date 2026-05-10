@@ -181,6 +181,15 @@ export function dtiHealth({ annualIncome, monthlyDebts, monthlyHousing }) {
   return { ratio, level };
 }
 
+/** Housing payment vs estimated monthly net (after tax); mirrors NetIncome UI. */
+export function housingVsNetHealth(monthlyNet, monthlyHousing) {
+  if (!Number.isFinite(monthlyNet) || monthlyNet <= 0) return 'red';
+  const r = monthlyHousing / monthlyNet;
+  if (r <= 0.3) return 'green';
+  if (r <= 0.45) return 'yellow';
+  return 'red';
+}
+
 // ---------- Affordability comfort level (for the price-explorer slider) ----
 
 /**
@@ -490,6 +499,66 @@ export function emergencyFundCheck({
     level,
     recommended3mo: totalMonthlyBurn * 3,
     recommended6mo: totalMonthlyBurn * 6,
+  };
+}
+
+// ---------- Cash left after closing (distinct from emergency months) --------
+
+/**
+ * Do you keep a tangible dollar cushion right after wiring down payment +
+ * closing costs, before judging reserves in months?
+ *
+ * Threshold: max($2,500, 3% of gross annual income) — a light floor before
+ * the emergency-fund countdown.
+ */
+export function cashAfterClosingHealth({
+  currentSavings,
+  downPayment,
+  closingCosts,
+  annualIncome,
+}) {
+  const remainingSavings = currentSavings - downPayment - closingCosts;
+  const minComfort = Math.max(2500, (annualIncome || 0) * 0.03);
+
+  let level = 'green';
+  if (remainingSavings <= 0) level = 'red';
+  else if (remainingSavings < minComfort) level = 'yellow';
+
+  return {
+    remainingSavings,
+    minComfort,
+    level,
+    shortfall: remainingSavings < 0 ? -remainingSavings : 0,
+  };
+}
+
+/**
+ * Rough monthly slack after housing + debts + ~25% of gross toward living costs
+ * (same stub as emergencyFundCheck).
+ */
+export function monthlyDiscretionaryBuffer({
+  monthlyNet,
+  monthlyHousing,
+  monthlyDebts,
+  annualIncome,
+}) {
+  const livingExpensesMonthly = annualIncome > 0 ? (annualIncome / 12) * 0.25 : 0;
+  const leftover =
+    monthlyNet - monthlyHousing - monthlyDebts - livingExpensesMonthly;
+
+  const comfortFloor =
+    monthlyNet > 0 ? Math.max(200, monthlyNet * 0.1) : 200;
+
+  let level = 'green';
+  if (leftover <= 0) level = 'red';
+  else if (leftover < comfortFloor) level = 'yellow';
+
+  return {
+    leftover,
+    livingExpensesMonthly,
+    comfortFloor,
+    level,
+    monthlyNet,
   };
 }
 

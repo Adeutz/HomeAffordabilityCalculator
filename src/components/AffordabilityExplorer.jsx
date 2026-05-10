@@ -103,7 +103,7 @@ export default function AffordabilityExplorer({
         : 'This is above what most lenders will approve, and your monthly budget would be very squeezed. Consider waiting, putting more down, or paying off other debts first.';
 
   return (
-    <Card title="What if I bought a home at this price?">
+    <Card id="health-detail-payment-vs-income" title="What if I bought a home at this price?">
       <div className="explorer-head">
         <div>
           <div className="text-small muted">Planned home price</div>
