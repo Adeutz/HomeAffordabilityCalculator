@@ -323,6 +323,33 @@ export function comfortAnalysis({
   };
 }
 
+// ---------- Down-payment solver ---------------------------------------------
+
+/**
+ * Binary-search for the minimum down payment that brings the total monthly
+ * housing payment at or below `targetMonthly` for a fixed home price.
+ *
+ * Returns the required down payment amount. If even paying all cash (zero
+ * loan) can't get the monthly below target (e.g. taxes + insurance alone
+ * exceed it), returns `homePrice` as a sentinel meaning "not achievable."
+ */
+export function downPaymentForTargetMonthly(inputs, targetMonthly) {
+  const { homePrice } = inputs;
+  // Check if paying all-cash still exceeds target (taxes + insurance + HOA floor)
+  const allCashMonthly = monthlyPaymentBreakdown({ ...inputs, downPayment: homePrice }).total;
+  if (allCashMonthly >= targetMonthly) return homePrice;
+
+  let lo = inputs.downPayment;
+  let hi = homePrice;
+  for (let i = 0; i < 60; i++) {
+    const mid = (lo + hi) / 2;
+    const monthly = monthlyPaymentBreakdown({ ...inputs, downPayment: mid }).total;
+    if (monthly > targetMonthly) lo = mid;
+    else hi = mid;
+  }
+  return hi;
+}
+
 // ---------- Closing costs ---------------------------------------------------
 
 /**

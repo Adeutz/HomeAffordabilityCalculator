@@ -133,3 +133,5 @@ All colors live as CSS variables at the top of `src/styles/global.css`. There's 
 ## License
 
 MIT — do whatever you want with this. Have fun!
+
+_Deployment trigger commit: May 8, 2026._

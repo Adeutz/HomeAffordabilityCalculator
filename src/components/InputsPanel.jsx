@@ -153,10 +153,17 @@ export default function InputsPanel() {
               className="input"
               type="text"
               inputMode="numeric"
+              enterKeyHint="done"
               maxLength={5}
               defaultValue={inputs.zip}
               placeholder="e.g. 78701"
               onBlur={onZipBlur}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  e.currentTarget.blur();
+                }
+              }}
             />
             {zipBusy && <div className="hint">Looking up…</div>}
             {zipError && <div className="hint" style={{ color: 'var(--red)' }}>{zipError}</div>}

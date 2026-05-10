@@ -138,6 +138,7 @@ export default function Slider({
               ref={inputRef}
               type="text"
               inputMode="decimal"
+              enterKeyHint="done"
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               onBlur={commit}
