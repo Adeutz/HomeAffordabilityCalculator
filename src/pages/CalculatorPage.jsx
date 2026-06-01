@@ -4,18 +4,31 @@ import ResultsPanel from '../components/ResultsPanel.jsx';
 import ShareButton from '../components/ShareButton.jsx';
 import ExportPdfButton from '../components/ExportPdfButton.jsx';
 import SaveScenarioButton from '../components/SaveScenarioButton.jsx';
+import CalculatorModeSwitch from '../components/CalculatorModeSwitch.jsx';
 
 export default function CalculatorPage() {
-  const { inputs } = useInputs();
+  const { inputs, update } = useInputs();
+  const isTargetMode = inputs.calculatorMode === 'target';
 
   return (
     <div>
       <div className="page-title">
-        <h1>How much house can I afford?</h1>
+        <h1>
+          {isTargetMode
+            ? 'Can I afford this house?'
+            : 'How much house can I afford?'}
+        </h1>
         <span className="subtitle">
-          Drag the sliders to see what changes. Everything saves automatically.
+          {isTargetMode
+            ? "Enter the price you want to pay — we'll show what to change to make it work."
+            : 'Drag the sliders to see what changes. Everything saves automatically.'}
         </span>
       </div>
+
+      <CalculatorModeSwitch
+        mode={inputs.calculatorMode}
+        onChange={(mode) => update({ calculatorMode: mode })}
+      />
 
       <div className="row page-toolbar mb-16">
         <ShareButton inputs={inputs} />

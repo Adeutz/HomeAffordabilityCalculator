@@ -29,8 +29,8 @@ export default function BuyerComfortCard({
     <Card title="Buyer comfort (30/30/3 + Net Worth rule)">
       <div className="flex-between stack-sm-start mb-16">
         <div className="text-small muted">
-          Checked against your lender's-max <strong>home price</strong> of{' '}
-          <strong>{money(homePriceBeingChecked)}</strong> (not the loan amount).
+          Checked against your planned home price of{' '}
+          <strong>{money(homePriceBeingChecked)}</strong>.
         </div>
         <span className={`pill ${analysis.overallLevel}`}>
           <span className="dot" />

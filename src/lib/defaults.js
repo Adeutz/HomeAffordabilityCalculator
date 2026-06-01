@@ -39,6 +39,10 @@ export const DEFAULT_INPUTS = {
   // currentSavings; the user is expected to bump it up if they have retirement
   // accounts, home equity, etc.
   totalNetWorth: 60_000,
+
+  // Calculator mode: 'afford' = how much can I buy?  'target' = I picked a price.
+  calculatorMode: 'afford',
+  targetHomePrice: 400_000,
 };
 
 // What we feed the affordability binary search:

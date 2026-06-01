@@ -8,6 +8,7 @@ import TakeHomeBreakdown from './TakeHomeBreakdown.jsx';
 import EmergencyFundCheck from './EmergencyFundCheck.jsx';
 import AffordabilityExplorer from './AffordabilityExplorer.jsx';
 import BuyerComfortCard from './BuyerComfortCard.jsx';
+import MakeItWorkCard from './MakeItWorkCard.jsx';
 import { useInputs } from '../state/InputsContext.jsx';
 import {
   maxAffordableHomePrice,
@@ -24,6 +25,7 @@ import { money } from '../lib/format.js';
 
 export default function ResultsPanel() {
   const { inputs } = useInputs();
+  const isTargetMode = inputs.calculatorMode === 'target';
 
   const { lenderMaxPrice, comfortablePrice, netWorth } = useMemo(() => {
     const maxMonthlyHousingPayment = maxMonthlyHousingFromIncome({
@@ -82,7 +84,9 @@ export default function ResultsPanel() {
     setScenarioPrice(price);
   };
 
-  const purchasePrice = scenarioPrice ?? lenderMaxPrice;
+  const purchasePrice = isTargetMode
+    ? inputs.targetHomePrice
+    : scenarioPrice ?? lenderMaxPrice;
 
   const { breakdown, closingCosts, monthlyHousing, equityData, extraDPForDTI, extraDPForNetIncome, extraSavingsForEmergencyFund } = useMemo(() => {
     const breakdown = monthlyPaymentBreakdown({
@@ -173,14 +177,18 @@ export default function ResultsPanel() {
 
   return (
     <div>
-      {/* Set planned home price first — everything below matches this */}
-      <AffordabilityExplorer
-        lenderMaxPrice={lenderMaxPrice}
-        scenarioPrice={purchasePrice}
-        onScenarioPriceChange={handleScenarioPriceChange}
-      />
+      {isTargetMode ? (
+        <MakeItWorkCard inputs={inputs} targetHomePrice={purchasePrice} />
+      ) : (
+        <AffordabilityExplorer
+          lenderMaxPrice={lenderMaxPrice}
+          scenarioPrice={purchasePrice}
+          onScenarioPriceChange={handleScenarioPriceChange}
+        />
+      )}
 
       {/* Hero numbers — TWO prices, side by side: lender's max vs comfortable */}
+      {!isTargetMode && (
       <Card>
         <div className="hero-prices">
           <div className="hero-price-block stretch">
@@ -251,6 +259,47 @@ export default function ResultsPanel() {
           </div>
         </div>
       </Card>
+      )}
+
+      {isTargetMode && (
+        <Card>
+          <div className="text-small muted mb-12">
+            Comparing your target of <strong>{money(purchasePrice)}</strong> to
+            what lenders typically allow at your income:{' '}
+            <strong>{money(lenderMaxPrice)}</strong>
+            {purchasePrice > lenderMaxPrice
+              ? ` — you're ${money(purchasePrice - lenderMaxPrice)} over the usual max.`
+              : purchasePrice < lenderMaxPrice
+                ? ` — you're ${money(lenderMaxPrice - purchasePrice)} under the usual max.`
+                : ' — right at the usual max.'}
+          </div>
+          <div className="stat-grid">
+            <div className="stat">
+              <div className="label">Loan amount</div>
+              <div className="value">{money(purchasePrice - inputs.downPayment)}</div>
+            </div>
+            <div className="stat">
+              <div className="label">Down payment</div>
+              <div className="value">
+                {money(inputs.downPayment)}
+                <div className="text-tiny muted" style={{ fontWeight: 500 }}>
+                  {purchasePrice > 0
+                    ? `${((inputs.downPayment / purchasePrice) * 100).toFixed(1)}% of price`
+                    : ''}
+                </div>
+              </div>
+            </div>
+            <div className="stat">
+              <div className="label">Closing costs (est.)</div>
+              <div className="value">{money(closingCosts)}</div>
+            </div>
+            <div className="stat">
+              <div className="label">Cash needed at closing</div>
+              <div className="value">{money(inputs.downPayment + closingCosts)}</div>
+            </div>
+          </div>
+        </Card>
+      )}
 
       {/* Monthly breakdown */}
       <Card title="Monthly payment breakdown">

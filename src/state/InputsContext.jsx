@@ -73,6 +73,14 @@ function migrate(inputs) {
   } else {
     out.totalNetWorth = Number(out.totalNetWorth);
   }
+  if (out.calculatorMode !== 'afford' && out.calculatorMode !== 'target') {
+    out.calculatorMode = DEFAULT_INPUTS.calculatorMode;
+  }
+  if (out.targetHomePrice == null || Number.isNaN(Number(out.targetHomePrice))) {
+    out.targetHomePrice = DEFAULT_INPUTS.targetHomePrice;
+  } else {
+    out.targetHomePrice = Number(out.targetHomePrice);
+  }
   return out;
 }
 

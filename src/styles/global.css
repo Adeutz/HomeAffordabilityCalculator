@@ -293,6 +293,96 @@ h4 { font-size: 15px; color: var(--text-muted); font-weight: 600; }
   font-size: 15px;
 }
 
+/* Calculator mode toggle (afford vs target house price) */
+.mode-switch {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px;
+  margin-bottom: 16px;
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+.mode-switch-btn {
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 10px 16px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 150ms ease, color 150ms ease, box-shadow 150ms ease;
+}
+.mode-switch-btn:hover {
+  color: var(--text);
+}
+.mode-switch-btn.active {
+  background: var(--bg-card);
+  color: var(--brand);
+  box-shadow: 0 1px 4px rgba(13, 36, 64, 0.08);
+}
+
+/* "Make it work" action list */
+.make-it-work-success {
+  padding: 14px 16px;
+  border-radius: var(--radius-sm);
+  background: var(--green-soft);
+  border: 1px solid var(--green);
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.5;
+}
+.make-it-work-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.make-it-work-item {
+  display: grid;
+  grid-template-columns: 28px 1fr;
+  gap: 12px;
+  align-items: start;
+  padding: 14px 16px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-soft);
+}
+.make-it-work-item.red {
+  border-color: var(--red);
+  background: var(--red-soft);
+}
+.make-it-work-item.yellow {
+  border-color: var(--yellow);
+  background: var(--yellow-soft);
+}
+.make-it-work-num {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 14px;
+  background: var(--bg-card);
+  color: var(--text);
+  flex-shrink: 0;
+}
+.make-it-work-item.red .make-it-work-num {
+  background: var(--red);
+  color: #fff;
+}
+.make-it-work-title {
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
 /* ----------------------------------------------------------------------
    Card
 ---------------------------------------------------------------------- */

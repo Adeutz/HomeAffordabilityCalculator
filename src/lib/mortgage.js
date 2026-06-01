@@ -1,3 +1,5 @@
+import { estimateNet } from './taxes.js';
+
 // All the mortgage math lives here. Pure functions only (no UI), so it's easy
 // to test, easy to read, and easy to swap into any component.
 //
@@ -311,6 +313,310 @@ export function comfortAnalysis({
     housingRatio,
     incomeMultiple,
     networthRatio,
+  };
+}
+
+// ---------- Reverse affordability ("I picked a house — make it work") --------
+
+/**
+ * Minimum gross annual income needed so lenders would typically approve
+ * this home price (28/36 rule), holding debts and loan terms constant.
+ */
+export function minimumAnnualIncomeForHomePrice({
+  targetHomePrice,
+  monthlyDebts,
+  downPayment,
+  interestRate,
+  loanTermYears,
+  propertyTaxRatePct,
+  homeInsuranceAnnual,
+  hoaMonthly,
+  creditScore,
+}) {
+  if (targetHomePrice <= 0) return 0;
+
+  let lo = 0;
+  let hi = 5_000_000;
+
+  for (let i = 0; i < 60; i++) {
+    const mid = (lo + hi) / 2;
+    const maxMonthly = maxMonthlyHousingFromIncome({
+      annualIncome: mid,
+      monthlyDebts,
+    });
+    const maxPrice = maxAffordableHomePrice({
+      maxMonthlyHousingPayment: maxMonthly,
+      downPayment,
+      interestRate,
+      loanTermYears,
+      propertyTaxRatePct,
+      homeInsuranceAnnual,
+      hoaMonthly,
+      creditScore,
+    });
+    if (maxPrice >= targetHomePrice) hi = mid;
+    else lo = mid;
+  }
+
+  return Math.ceil(hi / 1000) * 1000;
+}
+
+/**
+ * How much monthly debt you'd need to pay off so this home price fits the
+ * 36% back-end DTI rule at your current income. Returns 0 if already OK,
+ * or null if housing alone exceeds 36% of gross (debts can't fix it).
+ */
+export function debtPayoffForHomePrice({
+  targetHomePrice,
+  annualIncome,
+  monthlyDebts,
+  downPayment,
+  interestRate,
+  loanTermYears,
+  propertyTaxRatePct,
+  homeInsuranceAnnual,
+  hoaMonthly,
+  creditScore,
+}) {
+  const monthlyHousing = monthlyPaymentBreakdown({
+    homePrice: targetHomePrice,
+    downPayment,
+    interestRate,
+    loanTermYears,
+    propertyTaxRatePct,
+    homeInsuranceAnnual,
+    hoaMonthly,
+    creditScore,
+  }).total;
+
+  const grossMonthly = annualIncome / 12;
+  const maxDebts = grossMonthly * 0.36 - monthlyHousing;
+
+  if (maxDebts < 0) return null;
+  if (monthlyDebts <= maxDebts) return 0;
+  return Math.ceil((monthlyDebts - maxDebts) / 10) * 10;
+}
+
+/**
+ * One-stop analysis for "I want THIS house — what do I need to change?"
+ * Returns numeric gaps and a list of concrete action items.
+ */
+export function makeItWorkAnalysis(inputs, targetHomePrice) {
+  const closingCosts = estimateClosingCosts(
+    targetHomePrice,
+    inputs.closingCostsPct,
+  );
+  const ccForCheck = inputs.includeClosingCostsInSavingsCheck ? closingCosts : 0;
+  const breakdown = monthlyPaymentBreakdown({
+    ...inputs,
+    homePrice: targetHomePrice,
+  });
+  const monthlyHousing = breakdown.total;
+  const grossMonthly = inputs.annualIncome / 12;
+
+  const maxMonthlyForApproval = maxMonthlyHousingFromIncome({
+    annualIncome: inputs.annualIncome,
+    monthlyDebts: inputs.monthlyDebts,
+  });
+  const lenderMaxAtCurrentIncome = maxAffordableHomePrice({
+    maxMonthlyHousingPayment: maxMonthlyForApproval,
+    downPayment: inputs.downPayment,
+    interestRate: inputs.interestRate,
+    loanTermYears: inputs.loanTermYears,
+    propertyTaxRatePct: inputs.propertyTaxRatePct,
+    homeInsuranceAnnual: inputs.homeInsuranceAnnual,
+    hoaMonthly: inputs.hoaMonthly,
+    creditScore: inputs.creditScore,
+  });
+
+  const mortgageBase = {
+    homePrice: targetHomePrice,
+    downPayment: inputs.downPayment,
+    interestRate: inputs.interestRate,
+    loanTermYears: inputs.loanTermYears,
+    propertyTaxRatePct: inputs.propertyTaxRatePct,
+    homeInsuranceAnnual: inputs.homeInsuranceAnnual,
+    hoaMonthly: inputs.hoaMonthly,
+    creditScore: inputs.creditScore,
+  };
+
+  const cashNeeded = inputs.downPayment + closingCosts;
+  const cashShortfall = Math.max(0, cashNeeded - inputs.currentSavings);
+
+  const maxHealthyHousingDTI = Math.max(
+    0,
+    grossMonthly * 0.28 - inputs.monthlyDebts,
+  );
+  let extraDPForDTI = 0;
+  if (monthlyHousing > maxHealthyHousingDTI) {
+    if (maxHealthyHousingDTI <= 0) {
+      extraDPForDTI = null;
+    } else {
+      const neededDP = downPaymentForTargetMonthly(
+        mortgageBase,
+        maxHealthyHousingDTI,
+      );
+      extraDPForDTI =
+        neededDP >= targetHomePrice
+          ? null
+          : Math.max(0, neededDP - inputs.downPayment);
+    }
+  }
+
+  const taxResult = estimateNet({
+    grossAnnual: inputs.annualIncome,
+    stateAbbrev: inputs.stateAbbrev,
+    filingStatus: inputs.filingStatus,
+    overridePct:
+      inputs.effectiveTaxRateOverride === '' ||
+      inputs.effectiveTaxRateOverride == null
+        ? null
+        : Number(inputs.effectiveTaxRateOverride),
+  });
+  const monthlyNet = taxResult.net / 12;
+  const maxHealthyHousingNet = monthlyNet * 0.3;
+  let extraDPForNetIncome = 0;
+  if (monthlyHousing > maxHealthyHousingNet && maxHealthyHousingNet > 0) {
+    const neededDP = downPaymentForTargetMonthly(
+      mortgageBase,
+      maxHealthyHousingNet,
+    );
+    extraDPForNetIncome =
+      neededDP >= targetHomePrice
+        ? null
+        : Math.max(0, neededDP - inputs.downPayment);
+  }
+
+  const debtPayoff = debtPayoffForHomePrice({
+    targetHomePrice,
+    annualIncome: inputs.annualIncome,
+    monthlyDebts: inputs.monthlyDebts,
+    ...mortgageBase,
+  });
+
+  const minIncome = minimumAnnualIncomeForHomePrice({
+    targetHomePrice,
+    monthlyDebts: inputs.monthlyDebts,
+    downPayment: inputs.downPayment,
+    interestRate: inputs.interestRate,
+    loanTermYears: inputs.loanTermYears,
+    propertyTaxRatePct: inputs.propertyTaxRatePct,
+    homeInsuranceAnnual: inputs.homeInsuranceAnnual,
+    hoaMonthly: inputs.hoaMonthly,
+    creditScore: inputs.creditScore,
+  });
+  const extraIncome = Math.max(0, minIncome - inputs.annualIncome);
+
+  const livingExpenses = grossMonthly * 0.25;
+  const totalMonthlyBurn = monthlyHousing + inputs.monthlyDebts + livingExpenses;
+  const remainingSavings =
+    inputs.currentSavings - inputs.downPayment - ccForCheck;
+  const extraSavingsForEmergencyFund = Math.max(
+    0,
+    totalMonthlyBurn * 3 - remainingSavings,
+  );
+
+  const comfort = affordabilityComfort({
+    monthlyHousing,
+    monthlyDebts: inputs.monthlyDebts,
+    annualIncome: inputs.annualIncome,
+  });
+
+  const lenderApproves = monthlyHousing <= maxMonthlyForApproval;
+  const actions = [];
+
+  if (cashShortfall > 0) {
+    actions.push({
+      id: 'cash',
+      level: 'red',
+      kind: 'cashShortfall',
+      amount: cashShortfall,
+      cashNeeded,
+      currentSavings: inputs.currentSavings,
+    });
+  }
+
+  if (!lenderApproves) {
+    if (extraDPForDTI != null && extraDPForDTI > 0) {
+      actions.push({
+        id: 'down-dti',
+        level: 'yellow',
+        kind: 'downPayment',
+        amount: extraDPForDTI,
+        reason: 'dti',
+      });
+    }
+    if (debtPayoff != null && debtPayoff > 0) {
+      actions.push({
+        id: 'debt',
+        level: 'yellow',
+        kind: 'debtPayoff',
+        amount: debtPayoff,
+      });
+    }
+    if (extraIncome > 0) {
+      actions.push({
+        id: 'income',
+        level: 'yellow',
+        kind: 'income',
+        amount: extraIncome,
+        targetIncome: minIncome,
+      });
+    }
+    if (
+      extraDPForDTI === null &&
+      (debtPayoff === null || debtPayoff <= 0) &&
+      extraIncome <= 0
+    ) {
+      actions.push({
+        id: 'too-expensive',
+        level: 'red',
+        kind: 'tooExpensive',
+        lenderMaxAtCurrentIncome,
+      });
+    }
+  }
+
+  if (extraDPForNetIncome != null && extraDPForNetIncome > 0) {
+    actions.push({
+      id: 'down-net',
+      level: 'yellow',
+      kind: 'downPayment',
+      amount: extraDPForNetIncome,
+      reason: 'netIncome',
+    });
+  }
+
+  if (extraSavingsForEmergencyFund > 0) {
+    actions.push({
+      id: 'emergency',
+      level: 'yellow',
+      kind: 'emergencyFund',
+      amount: extraSavingsForEmergencyFund,
+    });
+  }
+
+  const severity = { red: 0, yellow: 1, green: 2 };
+  actions.sort((a, b) => severity[a.level] - severity[b.level]);
+
+  return {
+    targetHomePrice,
+    monthlyHousing,
+    closingCosts,
+    lenderApproves,
+    lenderMaxAtCurrentIncome,
+    comfort,
+    actions,
+    allClear: actions.length === 0,
+    gaps: {
+      cashShortfall,
+      extraDPForDTI,
+      extraDPForNetIncome,
+      debtPayoff,
+      extraIncome,
+      minIncome,
+      extraSavingsForEmergencyFund,
+    },
   };
 }
 

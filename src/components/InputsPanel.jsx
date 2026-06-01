@@ -17,6 +17,7 @@ export default function InputsPanel() {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [zipBusy, setZipBusy] = useState(false);
   const [zipError, setZipError] = useState('');
+  const isTargetMode = inputs.calculatorMode === 'target';
 
   // Live "savings after closing" math, shown right under the savings slider
   // so the user can see the impact of their down payment + closing costs as
@@ -72,6 +73,21 @@ export default function InputsPanel() {
         </button>
       }
     >
+      {isTargetMode && (
+        <>
+          <Slider
+            label="House price you're looking at"
+            value={inputs.targetHomePrice}
+            onChange={(v) => update({ targetHomePrice: v })}
+            min={50_000}
+            max={2_000_000}
+            step={5_000}
+            hint="The listing price or offer you're thinking about. Everything on the right checks whether you can swing it."
+          />
+          <div className="divider" />
+        </>
+      )}
+
       <Slider
         label="Annual gross income"
         value={inputs.annualIncome}
