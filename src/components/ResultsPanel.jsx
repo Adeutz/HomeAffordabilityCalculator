@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import Card from './Card.jsx';
 import PaymentPieChart, { PIE_COLORS } from './PaymentPieChart.jsx';
 import EquityLineChart from './EquityLineChart.jsx';
@@ -10,7 +11,9 @@ import MonthlyBufferIndicator from './MonthlyBufferIndicator.jsx';
 import AffordabilityExplorer from './AffordabilityExplorer.jsx';
 import BuyerComfortCard from './BuyerComfortCard.jsx';
 import MakeItWorkCard from './MakeItWorkCard.jsx';
+import TaxBenefitCard from './TaxBenefitCard.jsx';
 import { money } from '../lib/format.js';
+import { estimateMortgageTaxBenefit } from '../lib/taxes.js';
 
 /** `scenario` from `useCalculatorScenario()` — keeps results and top lights aligned. */
 export default function ResultsPanel({ scenario }) {
@@ -30,6 +33,25 @@ export default function ResultsPanel({ scenario }) {
     closingCosts,
     equityData,
   } = scenario;
+
+  const loanAmount = Math.max(0, purchasePrice - inputs.downPayment);
+
+  const taxBenefit = useMemo(
+    () =>
+      estimateMortgageTaxBenefit({
+        grossAnnual: inputs.annualIncome,
+        filingStatus: inputs.filingStatus,
+        stateAbbrev: inputs.stateAbbrev,
+        loanAmount,
+        annualRatePct: inputs.interestRate,
+        termYears: inputs.loanTermYears,
+        homePrice: purchasePrice,
+        propertyTaxRatePct: inputs.propertyTaxRatePct,
+      }),
+    [inputs, purchasePrice, loanAmount],
+  );
+
+  const effectiveMonthlyAfterTax = breakdown.total - taxBenefit.monthlyBenefit;
 
   return (
     <div>
@@ -173,9 +195,31 @@ export default function ResultsPanel({ scenario }) {
               <span className="left">Total monthly</span>
               <span className="right">{money(breakdown.total)}</span>
             </div>
+            {taxBenefit.monthlyBenefit > 0 && (
+              <>
+                <div className="breakdown-row">
+                  <span className="left text-small muted">
+                    Est. tax benefit
+                  </span>
+                  <span className="right" style={{ color: 'var(--green)' }}>
+                    −{money(taxBenefit.monthlyBenefit)}
+                  </span>
+                </div>
+                <div className="breakdown-row total">
+                  <span className="left">Effective monthly (after tax)</span>
+                  <span className="right">{money(effectiveMonthlyAfterTax)}</span>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </Card>
+
+      <TaxBenefitCard
+        inputs={inputs}
+        purchasePrice={purchasePrice}
+        loanAmount={loanAmount}
+      />
 
       {/* Buyer comfort rules — 30/30/3 (+ NW); third rule uses loan + annual tax & insurance */}
       <BuyerComfortCard

@@ -148,3 +148,106 @@ export function estimateNet({
 export function netMonthly(args) {
   return estimateNet(args).net / 12;
 }
+
+// ---------- Mortgage tax benefit (rough, year-one estimate) ----------------
+
+const SALT_DEDUCTION_CAP = 10_000;
+
+/** Year-one mortgage interest (sum of first 12 amortization months). */
+function yearOneMortgageInterest(loanAmount, annualRatePct, termYears) {
+  const r = annualRatePct / 100 / 12;
+  const n = termYears * 12;
+  if (loanAmount <= 0 || n <= 0) return 0;
+  const factor = Math.pow(1 + r, n);
+  const payment =
+    r === 0 ? loanAmount / n : (loanAmount * r * factor) / (factor - 1);
+  let balance = loanAmount;
+  let interest = 0;
+  for (let m = 0; m < 12 && balance > 0; m++) {
+    const i = balance * r;
+    interest += i;
+    balance -= payment - i;
+  }
+  return interest;
+}
+
+/**
+ * Rough annual tax savings from deducting mortgage interest + property tax
+ * (with SALT cap), compared to taking the standard deduction.
+ * Not tax advice — real returns depend on AMT, other deductions, etc.
+ */
+export function estimateMortgageTaxBenefit({
+  grossAnnual,
+  filingStatus = 'single',
+  stateAbbrev = '',
+  loanAmount,
+  annualRatePct,
+  termYears,
+  homePrice,
+  propertyTaxRatePct,
+}) {
+  const empty = {
+    annualBenefit: 0,
+    monthlyBenefit: 0,
+    itemizes: false,
+    yearOneInterest: 0,
+    annualPropertyTax: 0,
+    saltDeduction: 0,
+    itemizedDeductions: 0,
+    standardDeduction: STANDARD_DEDUCTION[filingStatus] ?? STANDARD_DEDUCTION.single,
+    federalBenefit: 0,
+    stateBenefit: 0,
+  };
+
+  if (loanAmount <= 0 || homePrice <= 0 || grossAnnual <= 0) return empty;
+
+  const yearOneInterest = yearOneMortgageInterest(
+    loanAmount,
+    annualRatePct,
+    termYears,
+  );
+  const annualPropertyTax = homePrice * (propertyTaxRatePct / 100);
+
+  const brackets =
+    filingStatus === 'mfj' ? FEDERAL_BRACKETS_MFJ : FEDERAL_BRACKETS_SINGLE;
+  const stdDeduction =
+    STANDARD_DEDUCTION[filingStatus] ?? STANDARD_DEDUCTION.single;
+  const stateRate = (STATE_RATES[stateAbbrev] ?? 5.0) / 100;
+  const estimatedStateTax =
+    Math.max(0, grossAnnual - stdDeduction) * stateRate;
+
+  const saltDeduction = Math.min(
+    SALT_DEDUCTION_CAP,
+    annualPropertyTax + estimatedStateTax,
+  );
+  const itemizedDeductions = yearOneInterest + saltDeduction;
+
+  const federalWithStandard = taxFromBrackets(
+    Math.max(0, grossAnnual - stdDeduction),
+    brackets,
+  );
+  const deductionUsed = Math.max(stdDeduction, itemizedDeductions);
+  const federalWithItemized = taxFromBrackets(
+    Math.max(0, grossAnnual - deductionUsed),
+    brackets,
+  );
+  const federalBenefit = Math.max(0, federalWithStandard - federalWithItemized);
+
+  const extraDeduction = Math.max(0, itemizedDeductions - stdDeduction);
+  const stateBenefit = extraDeduction * stateRate;
+
+  const annualBenefit = federalBenefit + stateBenefit;
+
+  return {
+    annualBenefit,
+    monthlyBenefit: annualBenefit / 12,
+    itemizes: itemizedDeductions > stdDeduction,
+    yearOneInterest,
+    annualPropertyTax,
+    saltDeduction,
+    itemizedDeductions,
+    standardDeduction: stdDeduction,
+    federalBenefit,
+    stateBenefit,
+  };
+}

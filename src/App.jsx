@@ -7,6 +7,7 @@ import ScenariosPage from './pages/ScenariosPage.jsx';
 import LoanComparePage from './pages/LoanComparePage.jsx';
 import SavingsGoalPage from './pages/SavingsGoalPage.jsx';
 import RentVsBuyPage from './pages/RentVsBuyPage.jsx';
+import RefinancePage from './pages/RefinancePage.jsx';
 import { InputsProvider } from './state/InputsContext.jsx';
 import { useTheme } from './hooks/useTheme.js';
 import InstallPrompt from './components/InstallPrompt.jsx';
@@ -22,6 +23,7 @@ const NAV_ITEMS = [
   { to: '/stress', label: 'Stress test' },
   { to: '/scenarios', label: 'Scenarios' },
   { to: '/savings-goal', label: 'Savings goal' },
+  { to: '/refinance', label: 'Refinance' },
   { to: '/rent-vs-buy', label: 'Rent vs buy' },
 ];
 
@@ -139,6 +141,7 @@ export default function App() {
               <Route path="/stress" element={<StressTestPage />} />
               <Route path="/scenarios" element={<ScenariosPage />} />
               <Route path="/savings-goal" element={<SavingsGoalPage />} />
+              <Route path="/refinance" element={<RefinancePage />} />
               <Route path="/rent-vs-buy" element={<RentVsBuyPage />} />
             </Routes>
           </main>

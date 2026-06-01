@@ -1061,6 +1061,294 @@ export function monthlyDiscretionaryBuffer({
   };
 }
 
+// ---------- Simple savings projection ---------------------------------------
+
+/** Month-by-month savings until a fixed dollar target is hit. */
+export function projectSimpleSavings({
+  target,
+  current,
+  monthly,
+  returnPct,
+  maxMonths = 600,
+}) {
+  const r = returnPct / 100 / 12;
+  let balance = current;
+  let totalContributed = current;
+  let monthsToGoal = null;
+
+  for (let m = 1; m <= maxMonths; m++) {
+    balance = balance * (1 + r) + monthly;
+    totalContributed += monthly;
+    if (balance >= target && monthsToGoal == null) {
+      monthsToGoal = m;
+      break;
+    }
+  }
+
+  const targetDate = new Date();
+  if (monthsToGoal != null) {
+    targetDate.setMonth(targetDate.getMonth() + monthsToGoal);
+  }
+
+  return {
+    monthsToGoal,
+    targetDate,
+    totalContributed,
+    finalBalance: balance,
+    interestEarned: balance - totalContributed,
+  };
+}
+
+// ---------- Wait & save ("what if I wait?") ---------------------------------
+
+function downPaymentNeeded(homePrice, downPaymentMode, downPaymentPercent, downPaymentFixed) {
+  if (downPaymentMode === 'fixed') return downPaymentFixed;
+  return homePrice * (downPaymentPercent / 100);
+}
+
+function waitSnapshot({
+  inputs,
+  savings,
+  homePrice,
+  annualIncome,
+  downPaymentMode,
+  downPaymentPercent,
+  downPaymentFixed,
+}) {
+  const downNeeded = downPaymentNeeded(
+    homePrice,
+    downPaymentMode,
+    downPaymentPercent,
+    downPaymentFixed,
+  );
+  const closing = estimateClosingCosts(homePrice, inputs.closingCostsPct);
+  const cashNeeded = downNeeded + closing;
+  const cashGap = Math.max(0, cashNeeded - savings);
+  const hasCash = cashGap <= 0;
+
+  const maxMonthly = maxMonthlyHousingFromIncome({
+    annualIncome,
+    monthlyDebts: inputs.monthlyDebts,
+  });
+  const monthlyHousing = monthlyPaymentBreakdown({
+    ...inputs,
+    homePrice,
+    downPayment: downNeeded,
+  }).total;
+  const lenderOk = monthlyHousing <= maxMonthly;
+  const lenderGap = Math.max(0, monthlyHousing - maxMonthly);
+
+  const minIncome = minimumAnnualIncomeForHomePrice({
+    targetHomePrice: homePrice,
+    monthlyDebts: inputs.monthlyDebts,
+    downPayment: downNeeded,
+    interestRate: inputs.interestRate,
+    loanTermYears: inputs.loanTermYears,
+    propertyTaxRatePct: inputs.propertyTaxRatePct,
+    homeInsuranceAnnual: inputs.homeInsuranceAnnual,
+    hoaMonthly: inputs.hoaMonthly,
+    creditScore: inputs.creditScore,
+  });
+  const incomeGap = Math.max(0, minIncome - annualIncome);
+
+  return {
+    savings,
+    homePrice,
+    annualIncome,
+    downNeeded,
+    closing,
+    cashNeeded,
+    cashGap,
+    hasCash,
+    monthlyHousing,
+    maxMonthly,
+    lenderOk,
+    lenderGap,
+    minIncome,
+    incomeGap,
+    ready: hasCash && lenderOk,
+  };
+}
+
+/**
+ * Project saving while home prices and income grow. Finds when the buyer
+ * can afford the goal home (cash at closing + lender 28/36 approval).
+ */
+export function projectWaitAndSave({
+  inputs,
+  goalHomePrice,
+  monthlySavings,
+  savingsReturnPct,
+  homeAppreciationPct,
+  incomeGrowthPct,
+  downPaymentMode = 'percent',
+  downPaymentPercent = 20,
+  downPaymentFixed = 40_000,
+  milestoneMonths = [6, 12, 24],
+  maxMonths = 600,
+}) {
+  const r = savingsReturnPct / 100 / 12;
+  const homeGrowth = 1 + homeAppreciationPct / 100;
+  const incomeGrowth = 1 + incomeGrowthPct / 100;
+
+  let savings = inputs.currentSavings;
+  let homePrice = goalHomePrice;
+  let annualIncome = inputs.annualIncome;
+  let monthsToReady = null;
+  const timeline = [];
+
+  for (let m = 0; m <= maxMonths; m++) {
+    if (m > 0) {
+      savings = savings * (1 + r) + monthlySavings;
+      if (m % 12 === 0) {
+        homePrice *= homeGrowth;
+        annualIncome *= incomeGrowth;
+      }
+    }
+
+    const snap = waitSnapshot({
+      inputs,
+      savings,
+      homePrice,
+      annualIncome,
+      downPaymentMode,
+      downPaymentPercent,
+      downPaymentFixed,
+    });
+
+    if (milestoneMonths.includes(m)) {
+      timeline.push({ month: m, ...snap });
+    }
+
+    if (snap.ready && monthsToReady == null && m > 0) {
+      monthsToReady = m;
+    }
+  }
+
+  const readyDate = new Date();
+  if (monthsToReady != null) {
+    readyDate.setMonth(readyDate.getMonth() + monthsToReady);
+  }
+
+  const finalSnap =
+    monthsToReady != null
+      ? waitSnapshot({
+          inputs,
+          savings: (() => {
+            let s = inputs.currentSavings;
+            let hp = goalHomePrice;
+            let inc = inputs.annualIncome;
+            for (let m = 1; m <= monthsToReady; m++) {
+              s = s * (1 + r) + monthlySavings;
+              if (m % 12 === 0) {
+                hp *= homeGrowth;
+                inc *= incomeGrowth;
+              }
+            }
+            return s;
+          })(),
+          homePrice: (() => {
+            let hp = goalHomePrice;
+            for (let m = 1; m <= monthsToReady; m++) {
+              if (m % 12 === 0) hp *= homeGrowth;
+            }
+            return hp;
+          })(),
+          annualIncome: (() => {
+            let inc = inputs.annualIncome;
+            for (let m = 1; m <= monthsToReady; m++) {
+              if (m % 12 === 0) inc *= incomeGrowth;
+            }
+            return inc;
+          })(),
+          downPaymentMode,
+          downPaymentPercent,
+          downPaymentFixed,
+        })
+      : waitSnapshot({
+          inputs,
+          savings,
+          homePrice,
+          annualIncome,
+          downPaymentMode,
+          downPaymentPercent,
+          downPaymentFixed,
+        });
+
+  return {
+    monthsToReady,
+    readyDate,
+    finalSnap,
+    timeline,
+    startingHomePrice: goalHomePrice,
+  };
+}
+
+// ---------- Refinance analysis ----------------------------------------------
+
+/**
+ * Compare current loan payment vs a refi at a new rate (same remaining term).
+ */
+export function refinanceAnalysis({
+  loanBalance,
+  currentRatePct,
+  newRatePct,
+  yearsRemaining,
+  refiClosingCosts,
+}) {
+  if (loanBalance <= 0 || yearsRemaining <= 0) {
+    return {
+      currentPayment: 0,
+      newPayment: 0,
+      monthlySavings: 0,
+      breakEvenMonths: null,
+      lifetimeSavings: 0,
+      worthwhile: false,
+    };
+  }
+
+  const currentPayment = monthlyPI(loanBalance, currentRatePct, yearsRemaining);
+  const newPayment = monthlyPI(loanBalance, newRatePct, yearsRemaining);
+  const monthlySavings = currentPayment - newPayment;
+  const totalMonths = yearsRemaining * 12;
+
+  let breakEvenMonths = null;
+  if (monthlySavings > 0) {
+    breakEvenMonths = Math.ceil(refiClosingCosts / monthlySavings);
+  }
+
+  const lifetimeSavings =
+    monthlySavings > 0
+      ? monthlySavings * totalMonths - refiClosingCosts
+      : -refiClosingCosts;
+
+  const worthwhile =
+    monthlySavings > 0 &&
+    breakEvenMonths != null &&
+    breakEvenMonths <= totalMonths;
+
+  return {
+    currentPayment,
+    newPayment,
+    monthlySavings,
+    breakEvenMonths,
+    lifetimeSavings,
+    worthwhile,
+    totalMonths,
+  };
+}
+
+/** Loan snapshot from calculator inputs at a given home price. */
+export function loanSnapshotFromInputs(inputs, homePrice) {
+  const loanBalance = Math.max(0, homePrice - inputs.downPayment);
+  return {
+    loanBalance,
+    currentRatePct: inputs.interestRate,
+    yearsRemaining: inputs.loanTermYears,
+    homePrice,
+  };
+}
+
 // ---------- Rent vs Buy ----------------------------------------------------
 
 /**
