@@ -81,6 +81,23 @@ function migrate(inputs) {
   } else {
     out.targetHomePrice = Number(out.targetHomePrice);
   }
+  const gross = out.annualIncome ?? DEFAULT_INPUTS.annualIncome;
+  if (
+    out.monthlySpendingExcludingHousing == null ||
+    Number.isNaN(Number(out.monthlySpendingExcludingHousing))
+  ) {
+    out.monthlySpendingExcludingHousing = Math.round((gross / 12) * 0.25);
+  } else {
+    out.monthlySpendingExcludingHousing = Number(out.monthlySpendingExcludingHousing);
+  }
+  if (
+    out.extraHomeownerSpendingMonthly == null ||
+    Number.isNaN(Number(out.extraHomeownerSpendingMonthly))
+  ) {
+    out.extraHomeownerSpendingMonthly = DEFAULT_INPUTS.extraHomeownerSpendingMonthly;
+  } else {
+    out.extraHomeownerSpendingMonthly = Number(out.extraHomeownerSpendingMonthly);
+  }
   return out;
 }
 

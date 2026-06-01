@@ -183,6 +183,8 @@ export function useCalculatorScenario() {
       monthlyNet,
       monthlyHousing: mh,
       monthlyDebts: inputs.monthlyDebts,
+      monthlySpending: inputs.monthlySpendingExcludingHousing,
+      extraHomeownerSpending: inputs.extraHomeownerSpendingMonthly,
       annualIncome: inputs.annualIncome,
     }).level;
 

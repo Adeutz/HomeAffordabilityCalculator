@@ -27,7 +27,7 @@ const CHIPS = [
   {
     key: 'monthlyCashBuffer',
     short: 'Cash left / mo',
-    hint: 'Rough monthly slack after housing, debts, and a simple living-cost guess.',
+    hint: 'Leftover after mortgage, debts, and your spending sliders — see the card below payment breakdown.',
     targetId: 'health-detail-monthly-buffer',
   },
   {

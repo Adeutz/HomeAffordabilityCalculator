@@ -24,6 +24,10 @@ export const DEFAULT_INPUTS = {
   extraMonthlyPrincipal: 0,
   annualHomeAppreciationPct: 3,
 
+  // Monthly cash flow (everything except housing payment & debt payments)
+  monthlySpendingExcludingHousing: 1_875, // ~25% of gross at default income; user can set their real number
+  extraHomeownerSpendingMonthly: 200, // utilities bump, maintenance, yard, etc.
+
   // Optional location data
   zip: '',
   city: '',

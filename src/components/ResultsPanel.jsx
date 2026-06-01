@@ -7,7 +7,7 @@ import NetIncomeIndicator from './NetIncomeIndicator.jsx';
 import TakeHomeBreakdown from './TakeHomeBreakdown.jsx';
 import EmergencyFundCheck from './EmergencyFundCheck.jsx';
 import CashAfterClosingIndicator from './CashAfterClosingIndicator.jsx';
-import MonthlyBufferIndicator from './MonthlyBufferIndicator.jsx';
+import MonthlyLeftoverCard from './MonthlyLeftoverCard.jsx';
 import AffordabilityExplorer from './AffordabilityExplorer.jsx';
 import BuyerComfortCard from './BuyerComfortCard.jsx';
 import MakeItWorkCard from './MakeItWorkCard.jsx';
@@ -227,6 +227,8 @@ export default function ResultsPanel({ scenario }) {
         </div>
       </Card>
 
+      <MonthlyLeftoverCard monthlyHousing={breakdown.total} />
+
       <TaxBenefitCard
         inputs={inputs}
         purchasePrice={purchasePrice}
@@ -271,16 +273,6 @@ export default function ResultsPanel({ scenario }) {
               scenarioInputs={inputs}
               purchasePrice={purchasePrice}
               hideSandbox={isTargetMode}
-            />
-          </div>
-          <div id="health-detail-monthly-buffer">
-            <MonthlyBufferIndicator
-              annualIncome={inputs.annualIncome}
-              monthlyHousing={breakdown.total}
-              monthlyDebts={inputs.monthlyDebts}
-              stateAbbrev={inputs.stateAbbrev}
-              filingStatus={inputs.filingStatus}
-              overridePct={inputs.effectiveTaxRateOverride}
             />
           </div>
           <div id="health-detail-emergency">

@@ -1032,16 +1032,24 @@ export function cashAfterClosingHealth({
 }
 
 /**
- * Rough monthly slack after housing + debts + ~25% of gross toward living costs
- * (same stub as emergencyFundCheck).
+ * Monthly slack after housing + debts + user-entered living costs.
+ * `monthlySpending` = groceries, gas, fun, subscriptions, etc. (no rent/mortgage/debts).
+ * `extraHomeownerSpending` = expected bump once you own (utilities, upkeep, …).
  */
 export function monthlyDiscretionaryBuffer({
   monthlyNet,
   monthlyHousing,
   monthlyDebts,
+  monthlySpending = 0,
+  extraHomeownerSpending = 0,
   annualIncome,
 }) {
-  const livingExpensesMonthly = annualIncome > 0 ? (annualIncome / 12) * 0.25 : 0;
+  const livingExpensesMonthly =
+    monthlySpending > 0
+      ? monthlySpending + extraHomeownerSpending
+      : (annualIncome > 0 ? (annualIncome / 12) * 0.25 : 0) +
+        extraHomeownerSpending;
+
   const leftover =
     monthlyNet - monthlyHousing - monthlyDebts - livingExpensesMonthly;
 
@@ -1055,6 +1063,8 @@ export function monthlyDiscretionaryBuffer({
   return {
     leftover,
     livingExpensesMonthly,
+    baseSpending: monthlySpending,
+    extraHomeownerSpending,
     comfortFloor,
     level,
     monthlyNet,

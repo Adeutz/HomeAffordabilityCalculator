@@ -12,6 +12,8 @@ export default function MonthlyBufferIndicator({
   annualIncome,
   monthlyHousing,
   monthlyDebts,
+  monthlySpending = 0,
+  extraHomeownerSpending = 0,
   stateAbbrev,
   filingStatus,
   overridePct,
@@ -29,6 +31,8 @@ export default function MonthlyBufferIndicator({
     monthlyNet,
     monthlyHousing,
     monthlyDebts,
+    monthlySpending,
+    extraHomeownerSpending,
     annualIncome,
   });
 
