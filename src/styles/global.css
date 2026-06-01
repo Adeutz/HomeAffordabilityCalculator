@@ -411,6 +411,94 @@ h4 { font-size: 15px; color: var(--text-muted); font-weight: 600; }
 }
 
 /* ----------------------------------------------------------------------
+   Calculator — quick health strip
+---------------------------------------------------------------------- */
+.health-lights-strip {
+  margin-bottom: 16px;
+  padding: 14px 16px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg-soft);
+}
+
+.health-lights-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.health-lights-legend {
+  margin-top: 10px;
+  line-height: 1.45;
+}
+
+.health-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 11px;
+  min-height: 40px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  text-decoration: none;
+  touch-action: manipulation;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+  font-family: inherit;
+  line-height: inherit;
+}
+button.health-chip {
+  appearance: none;
+  cursor: pointer;
+  text-align: left;
+}
+.health-chip:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow);
+  text-decoration: none;
+}
+.health-chip:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+.health-chip-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.health-chip--green {
+  border-color: color-mix(in srgb, var(--green) 45%, var(--border));
+}
+.health-chip--green .health-chip-dot {
+  background: var(--green);
+}
+
+.health-chip--yellow {
+  border-color: color-mix(in srgb, var(--yellow) 45%, var(--border));
+}
+.health-chip--yellow .health-chip-dot {
+  background: var(--yellow);
+}
+
+.health-chip--red {
+  border-color: color-mix(in srgb, var(--red) 45%, var(--border));
+}
+.health-chip--red .health-chip-dot {
+  background: var(--red);
+}
+
+/* In-page anchors: clear sticky app header when jumping from health chips */
+[id^='health-detail-'] {
+  scroll-margin-top: max(96px, calc(72px + env(safe-area-inset-top)));
+}
+
+/* ----------------------------------------------------------------------
    Layout helpers
 ---------------------------------------------------------------------- */
 .grid {
@@ -825,6 +913,22 @@ input[type='range']::-moz-range-thumb {
   gap: 12px;
   flex-wrap: wrap;
   margin-bottom: 8px;
+}
+
+.explorer-sticky-opt {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+  margin: 6px 0 8px;
+  line-height: 1.45;
+  touch-action: manipulation;
+}
+.explorer-sticky-opt input {
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  flex-shrink: 0;
 }
 .explorer-price {
   font-size: 32px;

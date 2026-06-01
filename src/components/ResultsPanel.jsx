@@ -1,4 +1,3 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
 import Card from './Card.jsx';
 import PaymentPieChart, { PIE_COLORS } from './PaymentPieChart.jsx';
 import EquityLineChart from './EquityLineChart.jsx';
@@ -6,174 +5,31 @@ import DTIIndicator from './DTIIndicator.jsx';
 import NetIncomeIndicator from './NetIncomeIndicator.jsx';
 import TakeHomeBreakdown from './TakeHomeBreakdown.jsx';
 import EmergencyFundCheck from './EmergencyFundCheck.jsx';
+import CashAfterClosingIndicator from './CashAfterClosingIndicator.jsx';
+import MonthlyBufferIndicator from './MonthlyBufferIndicator.jsx';
 import AffordabilityExplorer from './AffordabilityExplorer.jsx';
 import BuyerComfortCard from './BuyerComfortCard.jsx';
 import MakeItWorkCard from './MakeItWorkCard.jsx';
-import { useInputs } from '../state/InputsContext.jsx';
-import {
-  maxAffordableHomePrice,
-  maxMonthlyHousingFromIncome,
-  monthlyPaymentBreakdown,
-  amortizationSchedule,
-  equityOverTime,
-  estimateClosingCosts,
-  comfortAnalysis,
-  downPaymentForTargetMonthly,
-} from '../lib/mortgage.js';
-import { estimateNet } from '../lib/taxes.js';
 import { money } from '../lib/format.js';
 
-export default function ResultsPanel() {
-  const { inputs } = useInputs();
-  const isTargetMode = inputs.calculatorMode === 'target';
-
-  const { lenderMaxPrice, comfortablePrice, netWorth } = useMemo(() => {
-    const maxMonthlyHousingPayment = maxMonthlyHousingFromIncome({
-      annualIncome: inputs.annualIncome,
-      monthlyDebts: inputs.monthlyDebts,
-    });
-
-    const lenderMaxPrice = maxAffordableHomePrice({
-      maxMonthlyHousingPayment,
-      downPayment: inputs.downPayment,
-      interestRate: inputs.interestRate,
-      loanTermYears: inputs.loanTermYears,
-      propertyTaxRatePct: inputs.propertyTaxRatePct,
-      homeInsuranceAnnual: inputs.homeInsuranceAnnual,
-      hoaMonthly: inputs.hoaMonthly,
-      creditScore: inputs.creditScore,
-    });
-
-    const nw = Number(inputs.totalNetWorth) || inputs.currentSavings;
-    const comfort = comfortAnalysis({
-      annualIncome: inputs.annualIncome,
-      netWorth: nw,
-      homePriceBeingChecked: lenderMaxPrice,
-      monthlyHousing: 0,
-    });
-
-    const comfortablePrice = Math.max(0, comfort.idealMax);
-
-    return { lenderMaxPrice, comfortablePrice, netWorth: nw };
-  }, [inputs]);
-
-  const lenderBreakdownMonthly = useMemo(() => {
-    return monthlyPaymentBreakdown({
-      ...inputs,
-      homePrice: lenderMaxPrice,
-    }).total;
-  }, [inputs, lenderMaxPrice]);
-
-  const lenderMaxLoanAmount = Math.max(0, lenderMaxPrice - inputs.downPayment);
-
-  // Planned purchase price drives every figure on this column.
-  // "Sticky" behavior: once the user manually drags the home price slider,
-  // it stays put even if the lender max changes (e.g. because they adjusted
-  // income). It only auto-sets to lender max on the very first render.
-  const [scenarioPrice, setScenarioPrice] = useState(null);
-  const userHasAdjusted = useRef(false);
-
-  useEffect(() => {
-    if (scenarioPrice == null) {
-      setScenarioPrice(lenderMaxPrice);
-    }
-  }, [lenderMaxPrice]);
-
-  const handleScenarioPriceChange = (price) => {
-    userHasAdjusted.current = true;
-    setScenarioPrice(price);
-  };
-
-  const purchasePrice = isTargetMode
-    ? inputs.targetHomePrice
-    : scenarioPrice ?? lenderMaxPrice;
-
-  const { breakdown, closingCosts, monthlyHousing, equityData, extraDPForDTI, extraDPForNetIncome, extraSavingsForEmergencyFund } = useMemo(() => {
-    const breakdown = monthlyPaymentBreakdown({
-      ...inputs,
-      homePrice: purchasePrice,
-    });
-
-    const closingCosts = estimateClosingCosts(
-      purchasePrice,
-      inputs.closingCostsPct,
-    );
-
-    const schedule = amortizationSchedule({
-      loanAmount: Math.max(0, purchasePrice - inputs.downPayment),
-      annualRatePct: inputs.interestRate,
-      termYears: inputs.loanTermYears,
-      extraMonthlyPrincipal: inputs.extraMonthlyPrincipal,
-    });
-
-    const equityData = equityOverTime({
-      homePrice: purchasePrice,
-      downPayment: inputs.downPayment,
-      schedule,
-      annualAppreciationPct: inputs.annualHomeAppreciationPct,
-    });
-
-    // --- Health gap calculations ---
-    // Shared base inputs for the binary-search solver
-    const mortgageBase = {
-      homePrice: purchasePrice,
-      downPayment: inputs.downPayment,
-      interestRate: inputs.interestRate,
-      loanTermYears: inputs.loanTermYears,
-      propertyTaxRatePct: inputs.propertyTaxRatePct,
-      homeInsuranceAnnual: inputs.homeInsuranceAnnual,
-      hoaMonthly: inputs.hoaMonthly,
-      creditScore: inputs.creditScore,
-    };
-
-    const grossMonthly = inputs.annualIncome / 12;
-
-    // DTI: healthy means total DTI ≤ 28% of gross income
-    const maxHealthyHousingDTI = Math.max(0, grossMonthly * 0.28 - inputs.monthlyDebts);
-    let extraDPForDTI = 0; // 0 = already healthy; null = impossible; positive = extra $ needed
-    if (breakdown.total > maxHealthyHousingDTI) {
-      if (maxHealthyHousingDTI <= 0) {
-        extraDPForDTI = null; // debts alone exceed the 28% cap
-      } else {
-        const neededDP = downPaymentForTargetMonthly(mortgageBase, maxHealthyHousingDTI);
-        extraDPForDTI = neededDP >= purchasePrice ? null : Math.max(0, neededDP - inputs.downPayment);
-      }
-    }
-
-    // Net income: healthy means housing ≤ 30% of monthly net take-home
-    const taxResult = estimateNet({
-      grossAnnual: inputs.annualIncome,
-      stateAbbrev: inputs.stateAbbrev,
-      filingStatus: inputs.filingStatus,
-      overridePct: inputs.effectiveTaxRateOverride === '' || inputs.effectiveTaxRateOverride == null
-        ? null
-        : Number(inputs.effectiveTaxRateOverride),
-    });
-    const monthlyNet = taxResult.net / 12;
-    const maxHealthyHousingNet = monthlyNet * 0.30;
-    let extraDPForNetIncome = 0;
-    if (breakdown.total > maxHealthyHousingNet && maxHealthyHousingNet > 0) {
-      const neededDP = downPaymentForTargetMonthly(mortgageBase, maxHealthyHousingNet);
-      extraDPForNetIncome = neededDP >= purchasePrice ? null : Math.max(0, neededDP - inputs.downPayment);
-    }
-
-    // Emergency fund: healthy means ≥ 3 months of expenses remain after closing
-    const ccForCheck = inputs.includeClosingCostsInSavingsCheck ? closingCosts : 0;
-    const remainingSavings = inputs.currentSavings - inputs.downPayment - ccForCheck;
-    const livingExpenses = grossMonthly * 0.25;
-    const totalMonthlyBurn = breakdown.total + inputs.monthlyDebts + livingExpenses;
-    const extraSavingsForEmergencyFund = Math.max(0, totalMonthlyBurn * 3 - remainingSavings);
-
-    return {
-      breakdown,
-      closingCosts,
-      monthlyHousing: breakdown.total,
-      equityData,
-      extraDPForDTI,
-      extraDPForNetIncome,
-      extraSavingsForEmergencyFund,
-    };
-  }, [inputs, purchasePrice]);
+/** `scenario` from `useCalculatorScenario()` — keeps results and top lights aligned. */
+export default function ResultsPanel({ scenario }) {
+  const {
+    inputs,
+    isTargetMode,
+    lenderMaxPrice,
+    comfortablePrice,
+    netWorth,
+    lenderBreakdownMonthly,
+    lenderMaxLoanAmount,
+    purchasePrice,
+    setScenarioPrice,
+    stickyPlannedPrice,
+    setStickyPlannedPrice,
+    breakdown,
+    closingCosts,
+    equityData,
+  } = scenario;
 
   return (
     <div>
@@ -183,7 +39,9 @@ export default function ResultsPanel() {
         <AffordabilityExplorer
           lenderMaxPrice={lenderMaxPrice}
           scenarioPrice={purchasePrice}
-          onScenarioPriceChange={handleScenarioPriceChange}
+          onScenarioPriceChange={setScenarioPrice}
+          stickyPlannedPrice={stickyPlannedPrice}
+          onStickyPlannedPriceChange={setStickyPlannedPrice}
         />
       )}
 
@@ -319,46 +177,73 @@ export default function ResultsPanel() {
         </div>
       </Card>
 
-      {/* Buyer comfort rules — checks the planned price against 30/30/3 */}
+      {/* Buyer comfort rules — 30/30/3 (+ NW); third rule uses loan + annual tax & insurance */}
       <BuyerComfortCard
+        solverInputs={inputs}
         annualIncome={inputs.annualIncome}
         netWorth={netWorth}
         homePriceBeingChecked={purchasePrice}
         monthlyHousing={breakdown.total}
+        downPayment={inputs.downPayment}
+        propertyTaxRatePct={inputs.propertyTaxRatePct}
+        homeInsuranceAnnual={inputs.homeInsuranceAnnual}
       />
 
       {/* Health checks */}
-      <Card title="Financial health">
+      <Card title="Financial health" id="financial-health">
         <div
           className="grid"
           style={{
             gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
           }}
         >
-          <DTIIndicator
-            annualIncome={inputs.annualIncome}
-            monthlyDebts={inputs.monthlyDebts}
-            monthlyHousing={breakdown.total}
-            extraDownPaymentNeeded={extraDPForDTI}
-          />
-          <NetIncomeIndicator
-            annualIncome={inputs.annualIncome}
-            monthlyHousing={breakdown.total}
-            monthlyDebts={inputs.monthlyDebts}
-            stateAbbrev={inputs.stateAbbrev}
-            filingStatus={inputs.filingStatus}
-            overridePct={inputs.effectiveTaxRateOverride}
-            extraDownPaymentNeeded={extraDPForNetIncome}
-          />
-          <EmergencyFundCheck
-            currentSavings={inputs.currentSavings}
-            downPayment={inputs.downPayment}
-            closingCosts={inputs.includeClosingCostsInSavingsCheck ? closingCosts : 0}
-            monthlyHousing={breakdown.total}
-            monthlyDebts={inputs.monthlyDebts}
-            annualIncome={inputs.annualIncome}
-            extraSavingsNeeded={extraSavingsForEmergencyFund}
-          />
+          <div id="health-detail-total-dti">
+            <DTIIndicator
+              annualIncome={inputs.annualIncome}
+              monthlyDebts={inputs.monthlyDebts}
+              monthlyHousing={breakdown.total}
+            />
+          </div>
+          <div id="health-detail-net-housing">
+            <NetIncomeIndicator
+              annualIncome={inputs.annualIncome}
+              monthlyHousing={breakdown.total}
+              monthlyDebts={inputs.monthlyDebts}
+              stateAbbrev={inputs.stateAbbrev}
+              filingStatus={inputs.filingStatus}
+              overridePct={inputs.effectiveTaxRateOverride}
+              scenarioInputs={inputs}
+              purchasePrice={purchasePrice}
+            />
+          </div>
+          <div id="health-detail-monthly-buffer">
+            <MonthlyBufferIndicator
+              annualIncome={inputs.annualIncome}
+              monthlyHousing={breakdown.total}
+              monthlyDebts={inputs.monthlyDebts}
+              stateAbbrev={inputs.stateAbbrev}
+              filingStatus={inputs.filingStatus}
+              overridePct={inputs.effectiveTaxRateOverride}
+            />
+          </div>
+          <div id="health-detail-emergency">
+            <EmergencyFundCheck
+              currentSavings={inputs.currentSavings}
+              downPayment={inputs.downPayment}
+              closingCosts={inputs.includeClosingCostsInSavingsCheck ? closingCosts : 0}
+              monthlyHousing={breakdown.total}
+              monthlyDebts={inputs.monthlyDebts}
+              annualIncome={inputs.annualIncome}
+            />
+          </div>
+          <div id="health-detail-cash-after-closing">
+            <CashAfterClosingIndicator
+              currentSavings={inputs.currentSavings}
+              downPayment={inputs.downPayment}
+              closingCosts={inputs.includeClosingCostsInSavingsCheck ? closingCosts : 0}
+              annualIncome={inputs.annualIncome}
+            />
+          </div>
         </div>
       </Card>
 

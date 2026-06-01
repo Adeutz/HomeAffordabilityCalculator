@@ -183,6 +183,15 @@ export function dtiHealth({ annualIncome, monthlyDebts, monthlyHousing }) {
   return { ratio, level };
 }
 
+/** Housing payment vs estimated monthly net (after tax); mirrors NetIncome UI. */
+export function housingVsNetHealth(monthlyNet, monthlyHousing) {
+  if (!Number.isFinite(monthlyNet) || monthlyNet <= 0) return 'red';
+  const r = monthlyHousing / monthlyNet;
+  if (r <= 0.3) return 'green';
+  if (r <= 0.45) return 'yellow';
+  return 'red';
+}
+
 // ---------- Affordability comfort level (for the price-explorer slider) ----
 
 /**
@@ -238,12 +247,63 @@ export function affordabilityComfort({
 //
 //   30 - Housing ≤ 30% of gross income
 //   30 - Net worth ≥ 30% of home price (down payment + reserves)
-//   3  - Home price ≤ 3× annual gross income
+//   3  - (Loan + annual taxes + annual insurance) ≤ 3× annual gross income.
+//        Uses loan balance vs sticker price so big down payments are not double-counted.
 //
 // We also expose three "tiers" inspired by the same chart:
-//   - Stretch:    home ≤ 5× income, net worth ≥ 30% of home
-//   - Reasonable: home ≤ 4× income, net worth ≥ 50% of home
-//   - Ideal:      home ≤ 3× income, net worth ≥ 30% of home (the "3" target)
+//   - Stretch:    loan+tax+ins ≤ 5× income (vs gross), net worth ≥ 30% of home
+//   - Reasonable: loan+tax+ins ≤ 4× income, net worth ≥ 50% of home
+//   - Ideal:      loan+tax+ins ≤ 3× income, net worth ≥ 30% of home
+
+/**
+ * Dollars per year: starting loan principal + annual property tax (% of price) +
+ * annual homeowner's insurance. Excludes HOA and PMI — a lighter-weight
+ * heuristic than counting the whole sticker price toward the "× income" rule.
+ */
+export function annualLoanTaxInsuranceTotal({
+  homePrice,
+  downPayment,
+  propertyTaxRatePct,
+  homeInsuranceAnnual,
+}) {
+  const price = Math.max(0, homePrice);
+  const dp = Math.max(0, downPayment);
+  const loan = Math.max(0, price - dp);
+  const t = Math.max(0, (Number(propertyTaxRatePct) || 0) / 100);
+  const ins = Math.max(0, Number(homeInsuranceAnnual) || 0);
+  return loan + price * t + ins;
+}
+
+/**
+ * Largest home price (holding down payment fixed) whose annualLoanTaxInsuranceTotal
+ * stays at or below `incomeMultipleCap × annualIncome`.
+ */
+export function maxHomePriceForLoanTaxInsuranceMultiple({
+  annualIncome,
+  downPayment,
+  propertyTaxRatePct,
+  homeInsuranceAnnual,
+  incomeMultipleCap,
+}) {
+  const cap = incomeMultipleCap * Math.max(0, annualIncome);
+  const dp = Math.max(0, downPayment);
+  const t = Math.max(0, (Number(propertyTaxRatePct) || 0) / 100);
+  const ins = Math.max(0, Number(homeInsuranceAnnual) || 0);
+  if (cap <= 0 || incomeMultipleCap <= 0) return 0;
+
+  const denom = 1 + t;
+  const pLoan = denom > 0 ? (cap + dp - ins) / denom : 0;
+
+  if (pLoan >= dp) return Math.max(0, pLoan);
+
+  // Down payment exceeds the crossover price → treat as loan = 0, burden P·t + ins
+  if (t > 0) {
+    const pCash = (cap - ins) / t;
+    return Math.max(0, Math.min(dp, pCash));
+  }
+
+  return ins <= cap ? dp : 0;
+}
 
 /** Pure rule-check helpers so the UI can render pass/fail nicely. */
 export function comfortAnalysis({
@@ -251,18 +311,49 @@ export function comfortAnalysis({
   netWorth,
   homePriceBeingChecked,
   monthlyHousing,
+  downPayment = 0,
+  propertyTaxRatePct = 0,
+  homeInsuranceAnnual = 0,
 }) {
   const grossMonthly = annualIncome / 12;
 
+  const stretchCap = maxHomePriceForLoanTaxInsuranceMultiple({
+    annualIncome,
+    downPayment,
+    propertyTaxRatePct,
+    homeInsuranceAnnual,
+    incomeMultipleCap: 5,
+  });
+  const reasonableCap = maxHomePriceForLoanTaxInsuranceMultiple({
+    annualIncome,
+    downPayment,
+    propertyTaxRatePct,
+    homeInsuranceAnnual,
+    incomeMultipleCap: 4,
+  });
+  const idealCap = maxHomePriceForLoanTaxInsuranceMultiple({
+    annualIncome,
+    downPayment,
+    propertyTaxRatePct,
+    homeInsuranceAnnual,
+    incomeMultipleCap: 3,
+  });
+
   // Tier max prices (what you could comfortably afford at each level)
-  const stretchMax = Math.min(annualIncome * 5, netWorth / 0.3);
-  const reasonableMax = Math.min(annualIncome * 4, netWorth / 0.5);
-  const idealMax = Math.min(annualIncome * 3, netWorth / 0.3);
+  const stretchMax = Math.min(stretchCap, netWorth / 0.3);
+  const reasonableMax = Math.min(reasonableCap, netWorth / 0.5);
+  const idealMax = Math.min(idealCap, netWorth / 0.3);
 
   // Rule values for the home price being considered
   const housingRatio = grossMonthly > 0 ? monthlyHousing / grossMonthly : 1;
-  const incomeMultiple =
-    annualIncome > 0 ? homePriceBeingChecked / annualIncome : Infinity;
+  const burdenAnnual = annualLoanTaxInsuranceTotal({
+    homePrice: homePriceBeingChecked,
+    downPayment,
+    propertyTaxRatePct,
+    homeInsuranceAnnual,
+  });
+  const loanTaxInsuranceMultiple =
+    annualIncome > 0 ? burdenAnnual / annualIncome : Infinity;
   const networthRatio =
     homePriceBeingChecked > 0 ? netWorth / homePriceBeingChecked : 0;
 
@@ -288,12 +379,12 @@ export function comfortAnalysis({
       kind: 'ratio_min',
     },
     {
-      id: 'income3x',
-      label: 'Home price ≤ 3× annual income',
+      id: 'loanTaxIns3x',
+      label: 'Loan + yearly tax + yearly insurance ≤ 3× gross income',
       description:
-        'The "3" in 30/30/3 — the recommended sweet spot for long-term affordability.',
-      pass: incomeMultiple <= 3,
-      currentValue: incomeMultiple,
+        'A mortgage-focused take on the "3×" guideline: compare your loan principal plus one year of property tax and homeowner\'s insurance to income (not HOA or PMI). Big down payments help here.',
+      pass: loanTaxInsuranceMultiple <= 3,
+      currentValue: loanTaxInsuranceMultiple,
       target: 3,
       kind: 'multiple',
     },
@@ -311,7 +402,9 @@ export function comfortAnalysis({
     passCount,
     overallLevel,
     housingRatio,
-    incomeMultiple,
+    /** Same as legacy "incomeMultiple" naming — ratio of burden to income. */
+    incomeMultiple: loanTaxInsuranceMultiple,
+    loanTaxInsuranceMultiple,
     networthRatio,
   };
 }
@@ -627,16 +720,17 @@ export function makeItWorkAnalysis(inputs, targetHomePrice) {
  * housing payment at or below `targetMonthly` for a fixed home price.
  *
  * Returns the required down payment amount. If even paying all cash (zero
- * loan) can't get the monthly below target (e.g. taxes + insurance alone
- * exceed it), returns `homePrice` as a sentinel meaning "not achievable."
+ * loan) can't get the monthly **strictly below** target (taxes + insurance +
+ * HOA floor alone are too high), returns `homePrice` as a sentinel meaning
+ * "not achievable at or under target."
  */
 export function downPaymentForTargetMonthly(inputs, targetMonthly) {
   const { homePrice } = inputs;
   // Check if paying all-cash still exceeds target (taxes + insurance + HOA floor)
   const allCashMonthly = monthlyPaymentBreakdown({ ...inputs, downPayment: homePrice }).total;
-  if (allCashMonthly >= targetMonthly) return homePrice;
+  if (allCashMonthly > targetMonthly) return homePrice;
 
-  let lo = inputs.downPayment;
+  let lo = Math.min(Math.max(0, inputs.downPayment), homePrice);
   let hi = homePrice;
   for (let i = 0; i < 60; i++) {
     const mid = (lo + hi) / 2;
@@ -645,6 +739,87 @@ export function downPaymentForTargetMonthly(inputs, targetMonthly) {
     else hi = mid;
   }
   return hi;
+}
+
+const DP_EPS = 1;
+
+/**
+ * At this exact home price and income, what each buyer-comfort lever would need.
+ * Uses the same definitions as `comfortAnalysis` (30% gross for housing,
+ * loan+annual tax+ins for the "3×" line).
+ *
+ * @param mergedInputs Fields required by `monthlyPaymentBreakdown` plus `homePrice`
+ * @param netWorth Total net worth (same field as buyer comfort card)
+ */
+export function buyerComfortMinimumRequirements(mergedInputs, netWorth) {
+  const {
+    homePrice,
+    annualIncome,
+    propertyTaxRatePct,
+    homeInsuranceAnnual,
+  } = mergedInputs;
+
+  const price = Math.max(0, homePrice);
+  const grossMonthly = Math.max(0, annualIncome) / 12;
+  const targetHousing = grossMonthly * 0.3;
+
+  const baseForSearch = { ...mergedInputs, downPayment: 0 };
+
+  const allCashMonthly = monthlyPaymentBreakdown({
+    ...mergedInputs,
+    downPayment: price,
+  }).total;
+
+  let housing30;
+  if (allCashMonthly > targetHousing + 1e-6) {
+    housing30 = {
+      id: 'housing30',
+      mode: 'down_payment',
+      impossible: true,
+      minDownPayment: null,
+    };
+  } else {
+    const dp = downPaymentForTargetMonthly(baseForSearch, targetHousing);
+    housing30 = {
+      id: 'housing30',
+      mode: 'down_payment',
+      impossible: false,
+      minDownPayment: Math.min(price, Math.max(0, dp)),
+    };
+  }
+
+  const minNetWorth = price * 0.3;
+  const nwGap = Math.max(0, minNetWorth - netWorth);
+  const networth30 = {
+    id: 'networth30',
+    mode: 'net_worth',
+    minNetWorth,
+    gap: nwGap,
+  };
+
+  const t = Math.max(0, (Number(propertyTaxRatePct) || 0) / 100);
+  const ins = Math.max(0, Number(homeInsuranceAnnual) || 0);
+  const cap3 = 3 * Math.max(0, annualIncome);
+  const rawMinDp = price * (1 + t) + ins - cap3;
+
+  let loanTaxIns3x;
+  if (rawMinDp > price + DP_EPS) {
+    loanTaxIns3x = {
+      id: 'loanTaxIns3x',
+      mode: 'down_payment',
+      impossible: true,
+      minDownPayment: null,
+    };
+  } else {
+    loanTaxIns3x = {
+      id: 'loanTaxIns3x',
+      mode: 'down_payment',
+      impossible: false,
+      minDownPayment: Math.max(0, Math.min(price, rawMinDp)),
+    };
+  }
+
+  return { housing30, networth30, loanTaxIns3x };
 }
 
 // ---------- Closing costs ---------------------------------------------------
@@ -823,6 +998,66 @@ export function emergencyFundCheck({
     level,
     recommended3mo: totalMonthlyBurn * 3,
     recommended6mo: totalMonthlyBurn * 6,
+  };
+}
+
+// ---------- Cash left after closing (distinct from emergency months) --------
+
+/**
+ * Do you keep a tangible dollar cushion right after wiring down payment +
+ * closing costs, before judging reserves in months?
+ *
+ * Threshold: max($2,500, 3% of gross annual income) — a light floor before
+ * the emergency-fund countdown.
+ */
+export function cashAfterClosingHealth({
+  currentSavings,
+  downPayment,
+  closingCosts,
+  annualIncome,
+}) {
+  const remainingSavings = currentSavings - downPayment - closingCosts;
+  const minComfort = Math.max(2500, (annualIncome || 0) * 0.03);
+
+  let level = 'green';
+  if (remainingSavings <= 0) level = 'red';
+  else if (remainingSavings < minComfort) level = 'yellow';
+
+  return {
+    remainingSavings,
+    minComfort,
+    level,
+    shortfall: remainingSavings < 0 ? -remainingSavings : 0,
+  };
+}
+
+/**
+ * Rough monthly slack after housing + debts + ~25% of gross toward living costs
+ * (same stub as emergencyFundCheck).
+ */
+export function monthlyDiscretionaryBuffer({
+  monthlyNet,
+  monthlyHousing,
+  monthlyDebts,
+  annualIncome,
+}) {
+  const livingExpensesMonthly = annualIncome > 0 ? (annualIncome / 12) * 0.25 : 0;
+  const leftover =
+    monthlyNet - monthlyHousing - monthlyDebts - livingExpensesMonthly;
+
+  const comfortFloor =
+    monthlyNet > 0 ? Math.max(200, monthlyNet * 0.1) : 200;
+
+  let level = 'green';
+  if (leftover <= 0) level = 'red';
+  else if (leftover < comfortFloor) level = 'yellow';
+
+  return {
+    leftover,
+    livingExpensesMonthly,
+    comfortFloor,
+    level,
+    monthlyNet,
   };
 }
 

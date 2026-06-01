@@ -19,6 +19,8 @@ export default function AffordabilityExplorer({
   lenderMaxPrice,
   scenarioPrice,
   onScenarioPriceChange,
+  stickyPlannedPrice,
+  onStickyPlannedPriceChange,
 }) {
   const { inputs } = useInputs();
 
@@ -103,7 +105,7 @@ export default function AffordabilityExplorer({
         : 'This is above what most lenders will approve, and your monthly budget would be very squeezed. Consider waiting, putting more down, or paying off other debts first.';
 
   return (
-    <Card title="What if I bought a home at this price?">
+    <Card id="health-detail-payment-vs-income" title="What if I bought a home at this price?">
       <div className="explorer-head">
         <div>
           <div className="text-small muted">Planned home price</div>
@@ -119,6 +121,19 @@ export default function AffordabilityExplorer({
           {comfort.label}
         </span>
       </div>
+
+      <label className="explorer-sticky-opt text-small muted">
+        <input
+          type="checkbox"
+          checked={!!stickyPlannedPrice}
+          onChange={(e) => onStickyPlannedPriceChange(e.target.checked)}
+        />
+        <span>
+          Lock planned price when I change{' '}
+          <strong className="text-small">Your situation</strong>{' '}
+          <span className="text-tiny">(won&apos;t chase lender max)</span>
+        </span>
+      </label>
 
       <div className="explorer-slider">
         <Slider
