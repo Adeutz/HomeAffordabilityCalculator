@@ -24,8 +24,10 @@ export default function NetIncomeIndicator({
   overridePct,
   scenarioInputs,
   purchasePrice,
+  hideSandbox = false,
 }) {
   const hasSandbox =
+    !hideSandbox &&
     scenarioInputs != null &&
     Number.isFinite(purchasePrice) &&
     purchasePrice > 0;
@@ -197,6 +199,13 @@ export default function NetIncomeIndicator({
         take-home going only to housing. These are guesses from your sliders —
         still map to what you feel each month.
       </p>
+
+      {hideSandbox && (
+        <p className="text-tiny muted mt-12">
+          <a href="#what-if-sandbox">Play with the what-if sandbox</a> above to
+          try extra income or down payment without changing your main sliders.
+        </p>
+      )}
 
       {level === 'green' && hasSandbox && (
         <p className="text-tiny muted mt-12" style={{ lineHeight: 1.45 }}>

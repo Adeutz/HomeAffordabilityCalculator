@@ -11,6 +11,7 @@ import MonthlyBufferIndicator from './MonthlyBufferIndicator.jsx';
 import AffordabilityExplorer from './AffordabilityExplorer.jsx';
 import BuyerComfortCard from './BuyerComfortCard.jsx';
 import MakeItWorkCard from './MakeItWorkCard.jsx';
+import WhatIfSandbox from './WhatIfSandbox.jsx';
 import TaxBenefitCard from './TaxBenefitCard.jsx';
 import { money } from '../lib/format.js';
 import { estimateMortgageTaxBenefit } from '../lib/taxes.js';
@@ -56,7 +57,18 @@ export default function ResultsPanel({ scenario }) {
   return (
     <div>
       {isTargetMode ? (
-        <MakeItWorkCard inputs={inputs} targetHomePrice={purchasePrice} />
+        <>
+          <MakeItWorkCard inputs={inputs} targetHomePrice={purchasePrice} />
+          <WhatIfSandbox
+            annualIncome={inputs.annualIncome}
+            monthlyHousing={breakdown.total}
+            stateAbbrev={inputs.stateAbbrev}
+            filingStatus={inputs.filingStatus}
+            overridePct={inputs.effectiveTaxRateOverride}
+            scenarioInputs={inputs}
+            purchasePrice={purchasePrice}
+          />
+        </>
       ) : (
         <AffordabilityExplorer
           lenderMaxPrice={lenderMaxPrice}
@@ -258,6 +270,7 @@ export default function ResultsPanel({ scenario }) {
               overridePct={inputs.effectiveTaxRateOverride}
               scenarioInputs={inputs}
               purchasePrice={purchasePrice}
+              hideSandbox={isTargetMode}
             />
           </div>
           <div id="health-detail-monthly-buffer">

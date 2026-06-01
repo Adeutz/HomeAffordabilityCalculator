@@ -107,9 +107,9 @@ export default function MakeItWorkCard({ inputs, targetHomePrice }) {
       )}
 
       <div className="text-tiny muted mt-16">
-        Tip: drag the sliders on the left to try changes — the list above
-        updates live. You can mix options (e.g. save more <em>and</em> pay off
-        a car loan).
+        Tip: use the <strong>what-if sandbox</strong> below to try extra income
+        or down payment, or drag the sliders on the left — everything updates
+        live.
       </div>
     </Card>
   );
