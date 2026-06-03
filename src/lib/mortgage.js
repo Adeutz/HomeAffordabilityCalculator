@@ -989,6 +989,59 @@ export function mortgagePayoffAnalysis({
   };
 }
 
+/**
+ * Mortgage recast: after you've paid down the loan (e.g. with extra payments
+ * or a lump sum), the lender re-amortizes the *remaining* balance over the
+ * *remaining* term at the same rate. The payoff date stays the same, but your
+ * required monthly payment drops.
+ *
+ * We read the balance straight off a `payoffSchedule` (so it already reflects
+ * any extra payments), recalc the payment for the months that are left, and
+ * report how much lower it is than the original required payment.
+ *
+ * Returns null if the recast doesn't make sense (loan already paid off, recast
+ * timed at/after the final payment, etc.).
+ *
+ * @param schedule           rows from payoffSchedule (the "with extras" plan)
+ * @param recastMonth        1-based month the recast happens (e.g. year 5 = 60)
+ * @param annualRatePct      same rate as the original loan
+ * @param originalTermMonths total months of the original loan (years * 12)
+ * @param originalPayment    the original required monthly P&I (for the "drop")
+ */
+export function recastPayment({
+  schedule,
+  recastMonth,
+  annualRatePct,
+  originalTermMonths,
+  originalPayment,
+}) {
+  const month = Math.round(recastMonth);
+  if (month <= 0 || month >= originalTermMonths) return null;
+
+  const idx = month - 1;
+  // Loan already fully paid off before the recast date — nothing to recast.
+  if (idx >= schedule.length) return null;
+
+  const balanceAtRecast = schedule[idx].balance;
+  if (balanceAtRecast <= 0.01) return null;
+
+  const remainingMonths = originalTermMonths - month;
+  if (remainingMonths <= 0) return null;
+
+  const newPayment = monthlyPI(
+    balanceAtRecast,
+    annualRatePct,
+    remainingMonths / 12,
+  );
+
+  return {
+    balanceAtRecast,
+    remainingMonths,
+    newPayment,
+    monthlyDrop: Math.max(0, originalPayment - newPayment),
+  };
+}
+
 /** Equity built each year (home appreciation + principal paid down). */
 export function equityOverTime({
   homePrice,

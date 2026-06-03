@@ -7,11 +7,12 @@ import {
   CartesianGrid,
   Tooltip,
   Legend,
+  ReferenceLine,
   ResponsiveContainer,
 } from 'recharts';
 import Card from './Card.jsx';
 import NumberField from './NumberField.jsx';
-import { mortgagePayoffAnalysis } from '../lib/mortgage.js';
+import { mortgagePayoffAnalysis, recastPayment } from '../lib/mortgage.js';
 import { money, moneyExact } from '../lib/format.js';
 
 // Pay-off-early calculator for the "I have a house in mind" mode.
@@ -37,6 +38,9 @@ export default function MortgagePayoffCalculator({
   const [extraYearly, setExtraYearly] = useState(0);
   const [oneTimeAmount, setOneTimeAmount] = useState(0);
   const [oneTimeYear, setOneTimeYear] = useState(1);
+
+  const [recastEnabled, setRecastEnabled] = useState(false);
+  const [recastYear, setRecastYear] = useState(5);
 
   const [showTable, setShowTable] = useState(false);
 
@@ -101,6 +105,21 @@ export default function MortgagePayoffCalculator({
     d.setMonth(d.getMonth() + acceleratedMonths);
     return d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
   }, [acceleratedMonths]);
+
+  // Keep the recast year inside a sensible range for this loan.
+  const maxRecastYear = Math.max(1, term - 1);
+  const safeRecastYear = Math.min(maxRecastYear, Math.max(1, recastYear));
+
+  const recast = useMemo(() => {
+    if (!recastEnabled) return null;
+    return recastPayment({
+      schedule: accelerated,
+      recastMonth: safeRecastYear * 12,
+      annualRatePct: rate,
+      originalTermMonths: Math.round(term * 12),
+      originalPayment: basePayment,
+    });
+  }, [recastEnabled, accelerated, safeRecastYear, rate, term, basePayment]);
 
   return (
     <Card
@@ -178,19 +197,21 @@ export default function MortgagePayoffCalculator({
           min={0}
         />
       </div>
-      {oneTimeAmount > 0 && (
-        <div className="grid grid-three mt-8">
-          <NumberField
-            label="One-time payment made in year"
-            suffix={`Applied around ${oneTimeYear * 12} months in`}
-            value={oneTimeYear}
-            onChange={(v) => setOneTimeYear(Math.min(term, Math.max(1, Math.round(v))))}
-            step={1}
-            min={1}
-            max={term}
-          />
-        </div>
-      )}
+      <div className="grid grid-three mt-8">
+        <NumberField
+          label="Make the one-time payment in year"
+          suffix={
+            oneTimeAmount > 0
+              ? `Applied around ${oneTimeYear * 12} months in`
+              : 'Set when your one-time payment lands'
+          }
+          value={oneTimeYear}
+          onChange={(v) => setOneTimeYear(Math.min(term, Math.max(1, Math.round(v))))}
+          step={1}
+          min={1}
+          max={term}
+        />
+      </div>
 
       {/* Summary */}
       <div className="stat-grid mt-16">
@@ -231,6 +252,96 @@ export default function MortgagePayoffCalculator({
         </div>
       )}
 
+      {/* Recast (optional) */}
+      <div
+        className="mt-16"
+        style={{
+          borderTop: '1px solid var(--border)',
+          paddingTop: 16,
+        }}
+      >
+        <label
+          className="row text-small"
+          style={{ fontWeight: 600, cursor: 'pointer', gap: 8 }}
+        >
+          <input
+            type="checkbox"
+            checked={recastEnabled}
+            onChange={(e) => setRecastEnabled(e.target.checked)}
+          />
+          Recast my loan after paying it down
+        </label>
+        <div className="text-small muted mt-8">
+          A recast re-figures your monthly payment off the lower balance once
+          you've paid extra, keeping the same rate and the same payoff date — so
+          your required payment goes down. We read your balance at the year you
+          pick straight off the curve below (it already includes your extra
+          payments).
+        </div>
+
+        {recastEnabled && (
+          <>
+            <div className="grid grid-three mt-12">
+              <NumberField
+                label="Recast in year"
+                suffix={`Uses your balance ${safeRecastYear * 12} months in`}
+                value={safeRecastYear}
+                onChange={(v) =>
+                  setRecastYear(
+                    Math.min(maxRecastYear, Math.max(1, Math.round(v))),
+                  )
+                }
+                step={1}
+                min={1}
+                max={maxRecastYear}
+              />
+            </div>
+
+            {recast && recast.monthlyDrop > 0.5 ? (
+              <>
+                <div className="stat-grid mt-12">
+                  <div className="stat">
+                    <div className="label">Balance when you recast</div>
+                    <div className="value">{money(recast.balanceAtRecast)}</div>
+                  </div>
+                  <div className="stat">
+                    <div className="label">New monthly payment (P&amp;I)</div>
+                    <div className="value" style={{ color: 'var(--green)' }}>
+                      {money(recast.newPayment)}
+                    </div>
+                  </div>
+                  <div className="stat">
+                    <div className="label">Payment drops by</div>
+                    <div className="value" style={{ color: 'var(--green)' }}>
+                      {money(recast.monthlyDrop)}/mo
+                    </div>
+                  </div>
+                </div>
+                <div className="text-small mt-12">
+                  Recasting in year {safeRecastYear} would lower your required
+                  payment from <strong>{money(basePayment)}</strong> to{' '}
+                  <strong>{money(recast.newPayment)}</strong> a month for the
+                  remaining {Math.round(recast.remainingMonths / 12)} years —
+                  same rate, same payoff date.
+                </div>
+              </>
+            ) : recast ? (
+              <div className="text-small muted mt-12">
+                There's no meaningful payment drop here. Recasting only helps
+                after you've paid extra toward principal — add some extra
+                payments above first, then pick a recast year.
+              </div>
+            ) : (
+              <div className="text-small muted mt-12">
+                With these extra payments your loan is already paid off by year{' '}
+                {safeRecastYear}, so there's nothing left to recast. Try an
+                earlier recast year.
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
       {/* Balance over time */}
       <div className="text-small mt-16 mb-8" style={{ fontWeight: 600 }}>
         Loan balance over time
@@ -260,6 +371,19 @@ export default function MortgagePayoffCalculator({
               }}
             />
             <Legend wrapperStyle={{ fontSize: 13 }} />
+            {recastEnabled && recast && recast.monthlyDrop > 0.5 && (
+              <ReferenceLine
+                x={safeRecastYear}
+                stroke="var(--brand)"
+                strokeDasharray="4 4"
+                label={{
+                  value: 'Recast',
+                  position: 'top',
+                  fill: 'var(--brand)',
+                  fontSize: 12,
+                }}
+              />
+            )}
             <Line
               type="monotone"
               dataKey="noExtra"
