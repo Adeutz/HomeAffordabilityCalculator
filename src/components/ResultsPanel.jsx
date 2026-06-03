@@ -13,6 +13,7 @@ import BuyerComfortCard from './BuyerComfortCard.jsx';
 import MakeItWorkCard from './MakeItWorkCard.jsx';
 import WhatIfSandbox from './WhatIfSandbox.jsx';
 import TaxBenefitCard from './TaxBenefitCard.jsx';
+import MortgagePayoffCalculator from './MortgagePayoffCalculator.jsx';
 import { money } from '../lib/format.js';
 import { estimateMortgageTaxBenefit } from '../lib/taxes.js';
 
@@ -315,6 +316,14 @@ export default function ResultsPanel({ scenario }) {
           Your real numbers will vary.
         </div>
       </Card>
+
+      {isTargetMode && (
+        <MortgagePayoffCalculator
+          defaultLoanAmount={loanAmount}
+          defaultRate={inputs.interestRate}
+          defaultTermYears={inputs.loanTermYears}
+        />
+      )}
     </div>
   );
 }

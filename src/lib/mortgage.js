@@ -883,6 +883,112 @@ export function totalInterest(schedule) {
   return schedule.reduce((sum, row) => sum + row.interest, 0);
 }
 
+// ---------- Mortgage payoff (extra payments) -------------------------------
+//
+// A richer cousin of `amortizationSchedule` that supports three flavors of
+// extra principal at once, just like the Ramsey payoff calculator:
+//   extraMonthly  - added to every single payment
+//   extraYearly   - added once a year (on each 12th payment)
+//   oneTimeAmount - a single lump sum, applied in month `oneTimeMonth`
+//
+// Each row: { month, payment, interest, principal, extra, balance }
+
+/**
+ * Build a month-by-month payoff schedule with optional extra principal.
+ */
+export function payoffSchedule({
+  loanAmount,
+  annualRatePct,
+  termYears,
+  extraMonthly = 0,
+  extraYearly = 0,
+  oneTimeAmount = 0,
+  oneTimeMonth = 12,
+}) {
+  const r = annualRatePct / 100 / 12;
+  const n = Math.round(termYears * 12);
+  const basePayment = monthlyPI(loanAmount, annualRatePct, termYears);
+
+  const rows = [];
+  let balance = Math.max(0, loanAmount);
+
+  for (let month = 1; month <= n && balance > 0.01; month++) {
+    const interest = balance * r;
+    let principal = basePayment - interest;
+    if (principal < 0) principal = 0; // safety for tiny balances / 0% edge cases
+
+    let extra = Math.max(0, extraMonthly);
+    if (extraYearly > 0 && month % 12 === 0) extra += extraYearly;
+    if (oneTimeAmount > 0 && month === oneTimeMonth) extra += oneTimeAmount;
+
+    // Never pay more than what's actually owed this month.
+    if (principal > balance) {
+      principal = balance;
+      extra = 0;
+    } else if (principal + extra > balance) {
+      extra = balance - principal;
+    }
+
+    balance = balance - principal - extra;
+    rows.push({
+      month,
+      payment: basePayment + extra,
+      interest,
+      principal,
+      extra,
+      balance: Math.max(0, balance),
+    });
+    if (balance <= 0.01) break;
+  }
+  return rows;
+}
+
+/**
+ * Compare a loan with extra payments against the plain "minimum payments only"
+ * baseline. Returns how much sooner you'd be debt-free and how much interest
+ * you'd save, plus both schedules (handy for charts and tables).
+ */
+export function mortgagePayoffAnalysis({
+  loanAmount,
+  annualRatePct,
+  termYears,
+  extraMonthly = 0,
+  extraYearly = 0,
+  oneTimeAmount = 0,
+  oneTimeMonth = 12,
+}) {
+  const basePayment = monthlyPI(loanAmount, annualRatePct, termYears);
+
+  const baseline = payoffSchedule({ loanAmount, annualRatePct, termYears });
+  const accelerated = payoffSchedule({
+    loanAmount,
+    annualRatePct,
+    termYears,
+    extraMonthly,
+    extraYearly,
+    oneTimeAmount,
+    oneTimeMonth,
+  });
+
+  const baselineInterest = totalInterest(baseline);
+  const acceleratedInterest = totalInterest(accelerated);
+  const hasExtra =
+    (extraMonthly || 0) + (extraYearly || 0) + (oneTimeAmount || 0) > 0;
+
+  return {
+    basePayment,
+    baseline,
+    accelerated,
+    baselineMonths: baseline.length,
+    acceleratedMonths: accelerated.length,
+    monthsSaved: Math.max(0, baseline.length - accelerated.length),
+    baselineInterest,
+    acceleratedInterest,
+    interestSaved: Math.max(0, baselineInterest - acceleratedInterest),
+    hasExtra,
+  };
+}
+
 /** Equity built each year (home appreciation + principal paid down). */
 export function equityOverTime({
   homePrice,
