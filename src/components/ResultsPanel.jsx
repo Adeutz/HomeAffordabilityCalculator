@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import Card from './Card.jsx';
 import PaymentPieChart, { PIE_COLORS } from './PaymentPieChart.jsx';
 import EquityLineChart from './EquityLineChart.jsx';
@@ -14,6 +14,7 @@ import MakeItWorkCard from './MakeItWorkCard.jsx';
 import WhatIfSandbox from './WhatIfSandbox.jsx';
 import TaxBenefitCard from './TaxBenefitCard.jsx';
 import MortgagePayoffCalculator from './MortgagePayoffCalculator.jsx';
+import RecastScenarioCards from './RecastScenarioCards.jsx';
 import { money } from '../lib/format.js';
 import { estimateMortgageTaxBenefit } from '../lib/taxes.js';
 
@@ -37,6 +38,8 @@ export default function ResultsPanel({ scenario }) {
   } = scenario;
 
   const loanAmount = Math.max(0, purchasePrice - inputs.downPayment);
+
+  const [recastInfo, setRecastInfo] = useState(null);
 
   const taxBenefit = useMemo(
     () =>
@@ -322,6 +325,17 @@ export default function ResultsPanel({ scenario }) {
           defaultLoanAmount={loanAmount}
           defaultRate={inputs.interestRate}
           defaultTermYears={inputs.loanTermYears}
+          onRecastResult={setRecastInfo}
+        />
+      )}
+
+      {isTargetMode && recastInfo && (
+        <RecastScenarioCards
+          inputs={inputs}
+          purchasePrice={purchasePrice}
+          closingCosts={closingCosts}
+          currentBreakdown={breakdown}
+          recastInfo={recastInfo}
         />
       )}
     </div>

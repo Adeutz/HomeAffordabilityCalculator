@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   LineChart,
   Line,
@@ -29,6 +29,7 @@ export default function MortgagePayoffCalculator({
   defaultLoanAmount,
   defaultRate,
   defaultTermYears,
+  onRecastResult,
 }) {
   const [balanceOverride, setBalanceOverride] = useState(null);
   const [rateOverride, setRateOverride] = useState(null);
@@ -120,6 +121,25 @@ export default function MortgagePayoffCalculator({
       originalPayment: basePayment,
     });
   }, [recastEnabled, accelerated, safeRecastYear, rate, term, basePayment]);
+
+  const recastActive = !!(recastEnabled && recast && recast.monthlyDrop > 0.5);
+
+  // Lift the active recast up to the parent so it can render the post-recast
+  // breakdown / health / take-home cards below this calculator.
+  useEffect(() => {
+    if (!onRecastResult) return undefined;
+    onRecastResult(
+      recastActive
+        ? {
+            newPI: recast.newPayment,
+            balanceAtRecast: recast.balanceAtRecast,
+            remainingMonths: recast.remainingMonths,
+            recastYear: safeRecastYear,
+          }
+        : null,
+    );
+    return () => onRecastResult(null);
+  }, [onRecastResult, recastActive, recast, safeRecastYear]);
 
   return (
     <Card

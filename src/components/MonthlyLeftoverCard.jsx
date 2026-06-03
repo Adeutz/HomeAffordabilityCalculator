@@ -12,7 +12,10 @@ const COPY = {
   red: "You're spending more than you take home on paper — something has to give.",
 };
 
-export default function MonthlyLeftoverCard({ monthlyHousing }) {
+export default function MonthlyLeftoverCard({
+  monthlyHousing,
+  id = 'health-detail-monthly-buffer',
+}) {
   const { inputs, update } = useInputs();
 
   const normalizedOverride =
@@ -46,7 +49,7 @@ export default function MonthlyLeftoverCard({ monthlyHousing }) {
         : 'Underwater';
 
   return (
-    <Card title="What's left after all bills?" id="health-detail-monthly-buffer">
+    <Card title="What's left after all bills?" id={id}>
       <div className="flex-between stack-sm-start mb-16">
         <div>
           <div className="text-small muted">Leftover each month (estimated)</div>
