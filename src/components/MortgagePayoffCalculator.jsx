@@ -38,7 +38,15 @@ export default function MortgagePayoffCalculator({
   const [extraMonthly, setExtraMonthly] = useState(0);
   const [extraYearly, setExtraYearly] = useState(0);
   const [oneTimeAmount, setOneTimeAmount] = useState(0);
-  const [oneTimeYear, setOneTimeYear] = useState(1);
+
+  // When the loan's first payment happens — drives all the real calendar dates.
+  const now = new Date();
+  const [startMonthIdx, setStartMonthIdx] = useState(now.getMonth());
+  const [startYearNum, setStartYearNum] = useState(now.getFullYear());
+
+  // Exact calendar month/year the one-time lump sum lands.
+  const [oneTimeMonthIdx, setOneTimeMonthIdx] = useState(now.getMonth());
+  const [oneTimeYearNum, setOneTimeYearNum] = useState(now.getFullYear() + 1);
 
   const [recastEnabled, setRecastEnabled] = useState(false);
   const [recastYear, setRecastYear] = useState(5);
@@ -48,6 +56,33 @@ export default function MortgagePayoffCalculator({
   const balance = balanceOverride ?? Math.round(Math.max(0, defaultLoanAmount));
   const rate = rateOverride ?? defaultRate;
   const term = termOverride ?? defaultTermYears;
+
+  const totalMonths = Math.round(term * 12);
+
+  // Turn the one-time payment's calendar date into a 1-based loan month
+  // (payment #1 happens in the mortgage start month). Clamp into the loan.
+  const oneTimeLoanMonthRaw =
+    (oneTimeYearNum - startYearNum) * 12 +
+    (oneTimeMonthIdx - startMonthIdx) +
+    1;
+  const oneTimeLoanMonth = Math.min(
+    totalMonths,
+    Math.max(1, oneTimeLoanMonthRaw),
+  );
+  const oneTimeClamped = oneTimeAmount > 0 && oneTimeLoanMonthRaw !== oneTimeLoanMonth;
+
+  // Date string for a 1-based loan month, based on the start date.
+  const dateForLoanMonth = (loanMonth) => {
+    const d = new Date(startYearNum, startMonthIdx, 1);
+    d.setMonth(d.getMonth() + (Math.max(1, loanMonth) - 1));
+    return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  };
+
+  const shortDateForLoanMonth = (loanMonth) => {
+    const d = new Date(startYearNum, startMonthIdx, 1);
+    d.setMonth(d.getMonth() + (Math.max(1, loanMonth) - 1));
+    return d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+  };
 
   const isEdited =
     balanceOverride != null || rateOverride != null || termOverride != null;
@@ -67,9 +102,9 @@ export default function MortgagePayoffCalculator({
         extraMonthly,
         extraYearly,
         oneTimeAmount,
-        oneTimeMonth: Math.max(1, Math.round(oneTimeYear)) * 12,
+        oneTimeMonth: oneTimeLoanMonth,
       }),
-    [balance, rate, term, extraMonthly, extraYearly, oneTimeAmount, oneTimeYear],
+    [balance, rate, term, extraMonthly, extraYearly, oneTimeAmount, oneTimeLoanMonth],
   );
 
   const {
@@ -101,11 +136,20 @@ export default function MortgagePayoffCalculator({
     return rows;
   }, [baseline, accelerated, balance]);
 
+  // The final payment lands `acceleratedMonths - 1` months after the start.
   const payoffDate = useMemo(() => {
-    const d = new Date();
-    d.setMonth(d.getMonth() + acceleratedMonths);
-    return d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
-  }, [acceleratedMonths]);
+    if (acceleratedMonths <= 0) return '—';
+    const d = new Date(startYearNum, startMonthIdx, 1);
+    d.setMonth(d.getMonth() + (acceleratedMonths - 1));
+    return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  }, [acceleratedMonths, startYearNum, startMonthIdx]);
+
+  const baselinePayoffDate = useMemo(() => {
+    if (baseline.length <= 0) return '—';
+    const d = new Date(startYearNum, startMonthIdx, 1);
+    d.setMonth(d.getMonth() + (baseline.length - 1));
+    return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  }, [baseline.length, startYearNum, startMonthIdx]);
 
   // Keep the recast year inside a sensible range for this loan.
   const maxRecastYear = Math.max(1, term - 1);
@@ -187,6 +231,17 @@ export default function MortgagePayoffCalculator({
         />
       </div>
 
+      <div className="grid grid-three mt-8">
+        <MonthYearPicker
+          label="Mortgage start month"
+          monthIdx={startMonthIdx}
+          year={startYearNum}
+          onMonthChange={setStartMonthIdx}
+          onYearChange={setStartYearNum}
+          hint="The month of your first payment — used to figure your real payoff date."
+        />
+      </div>
+
       {/* Extra payments */}
       <div className="text-small mt-16 mb-8" style={{ fontWeight: 600 }}>
         Extra payments toward principal
@@ -218,18 +273,19 @@ export default function MortgagePayoffCalculator({
         />
       </div>
       <div className="grid grid-three mt-8">
-        <NumberField
-          label="Make the one-time payment in year"
-          suffix={
+        <MonthYearPicker
+          label="One-time payment month"
+          monthIdx={oneTimeMonthIdx}
+          year={oneTimeYearNum}
+          onMonthChange={setOneTimeMonthIdx}
+          onYearChange={setOneTimeYearNum}
+          hint={
             oneTimeAmount > 0
-              ? `Applied around ${oneTimeYear * 12} months in`
-              : 'Set when your one-time payment lands'
+              ? `Lands at payment #${oneTimeLoanMonth}${
+                  oneTimeClamped ? ' (clamped into your loan term)' : ''
+                }`
+              : 'Pick the exact month your one-time payment lands.'
           }
-          value={oneTimeYear}
-          onChange={(v) => setOneTimeYear(Math.min(term, Math.max(1, Math.round(v))))}
-          step={1}
-          min={1}
-          max={term}
         />
       </div>
 
@@ -260,8 +316,10 @@ export default function MortgagePayoffCalculator({
       {hasExtra ? (
         <div className="text-small mt-12">
           By paying extra, you'd be done in{' '}
-          <strong>{fmtDuration(acceleratedMonths)}</strong> instead of{' '}
-          <strong>{fmtDuration(baseline.length)}</strong>, and pay{' '}
+          <strong>{fmtDuration(acceleratedMonths)}</strong> (
+          <strong>{payoffDate}</strong>) instead of{' '}
+          <strong>{fmtDuration(baseline.length)}</strong> (
+          <strong>{baselinePayoffDate}</strong>), and pay{' '}
           <strong>{money(acceleratedInterest)}</strong> in interest instead of{' '}
           <strong>{money(baselineInterest)}</strong>.
         </div>
@@ -338,8 +396,10 @@ export default function MortgagePayoffCalculator({
                   </div>
                 </div>
                 <div className="text-small mt-12">
-                  Recasting in year {safeRecastYear} would lower your required
-                  payment from <strong>{money(basePayment)}</strong> to{' '}
+                  Recasting in year {safeRecastYear} (around{' '}
+                  <strong>{dateForLoanMonth(safeRecastYear * 12)}</strong>) would
+                  lower your required payment from{' '}
+                  <strong>{money(basePayment)}</strong> to{' '}
                   <strong>{money(recast.newPayment)}</strong> a month for the
                   remaining {Math.round(recast.remainingMonths / 12)} years —
                   same rate, same payoff date.
@@ -441,6 +501,7 @@ export default function MortgagePayoffCalculator({
             <thead>
               <tr>
                 <th>Month</th>
+                <th>Date</th>
                 <th>Payment</th>
                 <th>Principal</th>
                 <th>Interest</th>
@@ -452,6 +513,7 @@ export default function MortgagePayoffCalculator({
               {accelerated.map((r) => (
                 <tr key={r.month}>
                   <td>{r.month}</td>
+                  <td>{shortDateForLoanMonth(r.month)}</td>
                   <td>{moneyExact(r.payment)}</td>
                   <td>{moneyExact(r.principal)}</td>
                   <td>{moneyExact(r.interest)}</td>
@@ -476,4 +538,67 @@ function fmtDuration(months) {
   if (y > 0) parts.push(`${y} yr${y === 1 ? '' : 's'}`);
   if (m > 0) parts.push(`${m} mo${m === 1 ? '' : 's'}`);
   return parts.join(' ') || '0 mos';
+}
+
+const MONTHS = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+];
+
+/** A month dropdown + year number input, styled like the other fields. */
+function MonthYearPicker({
+  label,
+  monthIdx,
+  year,
+  onMonthChange,
+  onYearChange,
+  hint,
+}) {
+  return (
+    <div className="field">
+      <label>{label}</label>
+      <div className="row" style={{ gap: 8 }}>
+        <select
+          className="input"
+          value={monthIdx}
+          onChange={(e) => onMonthChange(Number(e.target.value))}
+        >
+          {MONTHS.map((m, i) => (
+            <option key={m} value={i}>
+              {m}
+            </option>
+          ))}
+        </select>
+        <input
+          className="input"
+          type="number"
+          inputMode="numeric"
+          enterKeyHint="done"
+          value={year}
+          min={1990}
+          max={2100}
+          step={1}
+          style={{ maxWidth: 110 }}
+          onChange={(e) => onYearChange(Number(e.target.value) || year)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              e.currentTarget.blur();
+            }
+          }}
+        />
+      </div>
+      {hint && <div className="hint">{hint}</div>}
+    </div>
+  );
 }
