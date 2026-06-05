@@ -13,6 +13,7 @@ import BuyerComfortCard from './BuyerComfortCard.jsx';
 import MakeItWorkCard from './MakeItWorkCard.jsx';
 import WhatIfSandbox from './WhatIfSandbox.jsx';
 import TaxBenefitCard from './TaxBenefitCard.jsx';
+import DownPaymentBumpCompare from './DownPaymentBumpCompare.jsx';
 import MortgagePayoffCalculator from './MortgagePayoffCalculator.jsx';
 import RecastScenarioCards from './RecastScenarioCards.jsx';
 import { money } from '../lib/format.js';
@@ -229,6 +230,11 @@ export default function ResultsPanel({ scenario }) {
             )}
           </div>
         </div>
+        <DownPaymentBumpCompare
+          inputs={inputs}
+          homePrice={purchasePrice}
+          currentMonthlyTotal={breakdown.total}
+        />
       </Card>
 
       <MonthlyLeftoverCard monthlyHousing={breakdown.total} />
