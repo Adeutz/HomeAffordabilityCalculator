@@ -269,6 +269,18 @@ h4 { font-size: 15px; color: var(--text-muted); font-weight: 600; }
   background: var(--bg-soft);
   border-color: var(--border-strong);
 }
+.icon-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.header-undo-redo {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
 
 .app-main {
   flex: 1;

@@ -5,7 +5,6 @@ import CalculatorHealthLights from '../components/CalculatorHealthLights.jsx';
 import ShareButton from '../components/ShareButton.jsx';
 import ExportPdfButton from '../components/ExportPdfButton.jsx';
 import SaveScenarioButton from '../components/SaveScenarioButton.jsx';
-import UndoRedoButtons from '../components/UndoRedoButtons.jsx';
 import CalculatorModeSwitch from '../components/CalculatorModeSwitch.jsx';
 import { useCalculatorScenario } from '../hooks/useCalculatorScenario.js';
 
@@ -35,7 +34,6 @@ export default function CalculatorPage() {
       />
 
       <div className="row page-toolbar mb-16">
-        <UndoRedoButtons />
         <ShareButton inputs={inputs} />
         <ExportPdfButton targetSelector="#calculator-pdf-target" filename="affordability.pdf" />
         <SaveScenarioButton />

@@ -13,6 +13,7 @@ import { useTheme } from './hooks/useTheme.js';
 import InstallPrompt from './components/InstallPrompt.jsx';
 import UpdatePrompt from './components/UpdatePrompt.jsx';
 import KeyboardDoneButton from './components/KeyboardDoneButton.jsx';
+import UndoRedoButtons from './components/UndoRedoButtons.jsx';
 
 const SIDEBAR_COLLAPSED_KEY = 'sidebar-collapsed';
 
@@ -113,6 +114,8 @@ export default function App() {
             >
               <span aria-hidden="true">{isMobileSidebarOpen ? '✕' : '☰'}</span>
             </button>
+
+            <UndoRedoButtons />
 
             <button
               className="icon-button"

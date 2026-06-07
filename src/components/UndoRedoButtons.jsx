@@ -21,27 +21,33 @@ export default function UndoRedoButtons() {
   }, [undo, redo]);
 
   return (
-    <>
+    <div className="header-undo-redo">
       <button
         type="button"
-        className="button ghost small"
+        className="icon-button"
         onClick={undo}
         disabled={!canUndo}
-        title="Undo last change (Ctrl+Z)"
+        title="Undo last change"
         aria-label="Undo"
       >
-        ↶ Undo
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+          <path d="M3 10h11a5 5 0 0 1 0 10H9" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M7 6L3 10l4 4" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
       </button>
       <button
         type="button"
-        className="button ghost small"
+        className="icon-button"
         onClick={redo}
         disabled={!canRedo}
-        title="Redo (Ctrl+Y)"
+        title="Redo"
         aria-label="Redo"
       >
-        ↷ Redo
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+          <path d="M21 10H10a5 5 0 0 0 0 10h5" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M17 6l4 4-4 4" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
       </button>
-    </>
+    </div>
   );
 }
