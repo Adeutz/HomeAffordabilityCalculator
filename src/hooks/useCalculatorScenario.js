@@ -23,7 +23,7 @@ import {
  * derived payments, closing costs, and traffic-light summaries.
  */
 export function useCalculatorScenario() {
-  const { inputs } = useInputs();
+  const { inputs, registerCalculatorExtras } = useInputs();
   const isTargetMode = inputs.calculatorMode === 'target';
 
   const { lenderMaxPrice, comfortablePrice, netWorth } = useMemo(() => {
@@ -103,6 +103,33 @@ export function useCalculatorScenario() {
   const purchasePrice = isTargetMode
     ? inputs.targetHomePrice
     : scenarioPrice ?? lenderMaxPrice;
+
+  useEffect(() => {
+    registerCalculatorExtras({
+      getExtras: () => ({
+        scenarioPrice,
+        stickyPlannedPrice,
+        lastSyncedLenderMax,
+      }),
+      applyExtras: (extras) => {
+        if ('stickyPlannedPrice' in extras) {
+          setStickyPlannedPriceState(Boolean(extras.stickyPlannedPrice));
+          save(KEYS.stickyPlannedPrice, Boolean(extras.stickyPlannedPrice));
+        }
+        if ('scenarioPrice' in extras) {
+          setScenarioPrice(extras.scenarioPrice);
+        }
+        if ('lastSyncedLenderMax' in extras) {
+          setLastSyncedLenderMax(extras.lastSyncedLenderMax);
+        }
+      },
+    });
+  }, [
+    scenarioPrice,
+    stickyPlannedPrice,
+    lastSyncedLenderMax,
+    registerCalculatorExtras,
+  ]);
 
   const { breakdown, closingCosts, monthlyHousing, equityData } = useMemo(() => {
     const breakdown = monthlyPaymentBreakdown({

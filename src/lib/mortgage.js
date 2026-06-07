@@ -990,6 +990,78 @@ export function mortgagePayoffAnalysis({
 }
 
 /**
+ * A payoff schedule that also models a recast at `recastMonth`.
+ *
+ * Before the recast: same as `payoffSchedule` — base payment plus any extra
+ * payments (monthly, yearly, one-time). At the recast, the remaining balance is
+ * re-amortized over the remaining term at the same rate, so the required
+ * payment drops. After the recast we pay that new lower payment straight
+ * through to the original payoff date (extra payments stop, matching the
+ * "lower my payment, keep my payoff date" goal of a recast).
+ *
+ * If `recastMonth` is falsy this behaves just like `payoffSchedule`.
+ */
+export function payoffScheduleWithRecast({
+  loanAmount,
+  annualRatePct,
+  termYears,
+  extraMonthly = 0,
+  extraYearly = 0,
+  oneTimeAmount = 0,
+  oneTimeMonth = 12,
+  recastMonth = 0,
+}) {
+  const r = annualRatePct / 100 / 12;
+  const n = Math.round(termYears * 12);
+  let basePayment = monthlyPI(loanAmount, annualRatePct, termYears);
+
+  const rows = [];
+  let balance = Math.max(0, loanAmount);
+  let recasted = false;
+
+  for (let month = 1; month <= n && balance > 0.01; month++) {
+    // Recast kicks in the month AFTER the chosen recast month, re-amortizing
+    // whatever balance is left over the months that remain.
+    if (!recasted && recastMonth > 0 && month === recastMonth + 1) {
+      const remainingMonths = n - (month - 1);
+      basePayment = monthlyPI(balance, annualRatePct, remainingMonths / 12);
+      recasted = true;
+    }
+
+    const interest = balance * r;
+    let principal = basePayment - interest;
+    if (principal < 0) principal = 0;
+
+    // Extra payments only apply up to (and including) the recast month.
+    let extra = 0;
+    if (!recasted) {
+      extra = Math.max(0, extraMonthly);
+      if (extraYearly > 0 && month % 12 === 0) extra += extraYearly;
+      if (oneTimeAmount > 0 && month === oneTimeMonth) extra += oneTimeAmount;
+    }
+
+    if (principal > balance) {
+      principal = balance;
+      extra = 0;
+    } else if (principal + extra > balance) {
+      extra = balance - principal;
+    }
+
+    balance = balance - principal - extra;
+    rows.push({
+      month,
+      payment: basePayment + extra,
+      interest,
+      principal,
+      extra,
+      balance: Math.max(0, balance),
+    });
+    if (balance <= 0.01) break;
+  }
+  return rows;
+}
+
+/**
  * Mortgage recast: after you've paid down the loan (e.g. with extra payments
  * or a lump sum), the lender re-amortizes the *remaining* balance over the
  * *remaining* term at the same rate. The payoff date stays the same, but your

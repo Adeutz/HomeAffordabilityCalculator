@@ -311,6 +311,7 @@ export default function NetIncomeIndicator({
             max={750_000}
             step={2500}
             format="money"
+            trackUndo={false}
             hint="Pretend a raise, bonus, or second job — taxes re-estimated off the higher gross."
           />
 
@@ -337,6 +338,7 @@ export default function NetIncomeIndicator({
               max={Math.max(10_000, maxSandboxExtraDown)}
               step={2500}
               format="money"
+              trackUndo={false}
               hint="Pretend you bring more cash to closing at the same listed price — smaller loan, often less PMI."
               noStretch
             />

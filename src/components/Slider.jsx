@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { money, percent } from '../lib/format.js';
+import { useInputs } from '../state/InputsContext.jsx';
 
 // A Zillow-style slider with an editable value.
 // - Drag the slider to change the value visually.
@@ -24,7 +25,10 @@ export default function Slider({
   // Useful when you have visuals positioned relative to the slider that
   // would shift if the slider stretched.
   noStretch = false,
+  // Sandboxed sliders (what-if panels) should pass false so undo only tracks real inputs.
+  trackUndo = true,
 }) {
+  const { beginGesture, endGesture } = useInputs();
   const trackRef = useRef(null);
   const inputRef = useRef(null);
   const [editing, setEditing] = useState(false);
@@ -74,6 +78,11 @@ export default function Slider({
   // Re-arm expansion when the user lets go.
   const handlePointerUp = () => {
     grewThisDragRef.current = false;
+    if (trackUndo) endGesture();
+  };
+
+  const handlePointerDown = () => {
+    if (trackUndo) beginGesture();
   };
 
   // Color-fill the part of the track to the left of the thumb.
@@ -168,6 +177,7 @@ export default function Slider({
         step={step}
         value={value}
         onChange={(e) => handleSliderChange(Number(e.target.value))}
+        onPointerDown={handlePointerDown}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
         onBlur={handlePointerUp}

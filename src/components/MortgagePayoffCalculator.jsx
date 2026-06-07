@@ -12,7 +12,12 @@ import {
 } from 'recharts';
 import Card from './Card.jsx';
 import NumberField from './NumberField.jsx';
-import { mortgagePayoffAnalysis, recastPayment } from '../lib/mortgage.js';
+import {
+  mortgagePayoffAnalysis,
+  recastPayment,
+  payoffScheduleWithRecast,
+} from '../lib/mortgage.js';
+import { load, save, KEYS } from '../lib/storage.js';
 import { money, moneyExact } from '../lib/format.js';
 
 // Pay-off-early calculator for the "I have a house in mind" mode.
@@ -35,23 +40,60 @@ export default function MortgagePayoffCalculator({
   const [rateOverride, setRateOverride] = useState(null);
   const [termOverride, setTermOverride] = useState(null);
 
-  const [extraMonthly, setExtraMonthly] = useState(0);
-  const [extraYearly, setExtraYearly] = useState(0);
-  const [oneTimeAmount, setOneTimeAmount] = useState(0);
+  // Remembered settings (extra payments, dates, recast) so they survive reloads
+  // and switching tabs instead of resetting to today's date.
+  const now = new Date();
+  const [saved] = useState(() => load(KEYS.payoffSettings, {}));
+
+  const [extraMonthly, setExtraMonthly] = useState(saved.extraMonthly ?? 0);
+  const [extraYearly, setExtraYearly] = useState(saved.extraYearly ?? 0);
+  const [oneTimeAmount, setOneTimeAmount] = useState(saved.oneTimeAmount ?? 0);
 
   // When the loan's first payment happens — drives all the real calendar dates.
-  const now = new Date();
-  const [startMonthIdx, setStartMonthIdx] = useState(now.getMonth());
-  const [startYearNum, setStartYearNum] = useState(now.getFullYear());
+  const [startMonthIdx, setStartMonthIdx] = useState(
+    saved.startMonthIdx ?? now.getMonth(),
+  );
+  const [startYearNum, setStartYearNum] = useState(
+    saved.startYearNum ?? now.getFullYear(),
+  );
 
   // Exact calendar month/year the one-time lump sum lands.
-  const [oneTimeMonthIdx, setOneTimeMonthIdx] = useState(now.getMonth());
-  const [oneTimeYearNum, setOneTimeYearNum] = useState(now.getFullYear() + 1);
+  const [oneTimeMonthIdx, setOneTimeMonthIdx] = useState(
+    saved.oneTimeMonthIdx ?? now.getMonth(),
+  );
+  const [oneTimeYearNum, setOneTimeYearNum] = useState(
+    saved.oneTimeYearNum ?? now.getFullYear() + 1,
+  );
 
-  const [recastEnabled, setRecastEnabled] = useState(false);
-  const [recastYear, setRecastYear] = useState(5);
+  const [recastEnabled, setRecastEnabled] = useState(saved.recastEnabled ?? false);
+  const [recastYear, setRecastYear] = useState(saved.recastYear ?? 5);
 
   const [showTable, setShowTable] = useState(false);
+
+  // Persist whenever any remembered setting changes.
+  useEffect(() => {
+    save(KEYS.payoffSettings, {
+      extraMonthly,
+      extraYearly,
+      oneTimeAmount,
+      startMonthIdx,
+      startYearNum,
+      oneTimeMonthIdx,
+      oneTimeYearNum,
+      recastEnabled,
+      recastYear,
+    });
+  }, [
+    extraMonthly,
+    extraYearly,
+    oneTimeAmount,
+    startMonthIdx,
+    startYearNum,
+    oneTimeMonthIdx,
+    oneTimeYearNum,
+    recastEnabled,
+    recastYear,
+  ]);
 
   const balance = balanceOverride ?? Math.round(Math.max(0, defaultLoanAmount));
   const rate = rateOverride ?? defaultRate;
@@ -167,6 +209,33 @@ export default function MortgagePayoffCalculator({
   }, [recastEnabled, accelerated, safeRecastYear, rate, term, basePayment]);
 
   const recastActive = !!(recastEnabled && recast && recast.monthlyDrop > 0.5);
+
+  // The month-by-month table reflects the recast when it's active (payment
+  // drops after the recast month); otherwise it's the plain extra-payments plan.
+  const tableSchedule = useMemo(() => {
+    if (!recastActive) return accelerated;
+    return payoffScheduleWithRecast({
+      loanAmount: balance,
+      annualRatePct: rate,
+      termYears: term,
+      extraMonthly,
+      extraYearly,
+      oneTimeAmount,
+      oneTimeMonth: oneTimeLoanMonth,
+      recastMonth: safeRecastYear * 12,
+    });
+  }, [
+    recastActive,
+    accelerated,
+    balance,
+    rate,
+    term,
+    extraMonthly,
+    extraYearly,
+    oneTimeAmount,
+    oneTimeLoanMonth,
+    safeRecastYear,
+  ]);
 
   // Lift the active recast up to the parent so it can render the post-recast
   // breakdown / health / take-home cards below this calculator.
@@ -496,34 +565,44 @@ export default function MortgagePayoffCalculator({
       </div>
 
       {showTable && (
-        <div className="table-wrap mt-12" style={{ maxHeight: 480 }}>
-          <table>
-            <thead>
-              <tr>
-                <th>Month</th>
-                <th>Date</th>
-                <th>Payment</th>
-                <th>Principal</th>
-                <th>Interest</th>
-                <th>Extra</th>
-                <th>Balance</th>
-              </tr>
-            </thead>
-            <tbody>
-              {accelerated.map((r) => (
-                <tr key={r.month}>
-                  <td>{r.month}</td>
-                  <td>{shortDateForLoanMonth(r.month)}</td>
-                  <td>{moneyExact(r.payment)}</td>
-                  <td>{moneyExact(r.principal)}</td>
-                  <td>{moneyExact(r.interest)}</td>
-                  <td>{r.extra > 0 ? moneyExact(r.extra) : '—'}</td>
-                  <td>{moneyExact(r.balance)}</td>
+        <>
+          {recastActive && (
+            <div className="text-tiny muted mt-12">
+              This table reflects your recast: extra payments run until{' '}
+              {dateForLoanMonth(safeRecastYear * 12)}, then the payment drops to{' '}
+              {money(recast.newPayment)} and runs through your original payoff
+              date.
+            </div>
+          )}
+          <div className="table-wrap mt-12" style={{ maxHeight: 480 }}>
+            <table>
+              <thead>
+                <tr>
+                  <th>Month</th>
+                  <th>Date</th>
+                  <th>Payment</th>
+                  <th>Principal</th>
+                  <th>Interest</th>
+                  <th>Extra</th>
+                  <th>Balance</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {tableSchedule.map((r) => (
+                  <tr key={r.month}>
+                    <td>{r.month}</td>
+                    <td>{shortDateForLoanMonth(r.month)}</td>
+                    <td>{moneyExact(r.payment)}</td>
+                    <td>{moneyExact(r.principal)}</td>
+                    <td>{moneyExact(r.interest)}</td>
+                    <td>{r.extra > 0 ? moneyExact(r.extra) : '—'}</td>
+                    <td>{moneyExact(r.balance)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
     </Card>
   );

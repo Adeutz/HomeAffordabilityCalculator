@@ -187,6 +187,7 @@ export default function WhatIfSandbox({
         max={750_000}
         step={2500}
         format="money"
+        trackUndo={false}
         hint={`Total in sandbox: ${money(whatIfGrossAnnual)}/yr (${money(annualIncome)} base${sandboxExtraAnnualIncome > 0 ? ` + ${money(sandboxExtraAnnualIncome)}` : ''})`}
       />
 
@@ -201,6 +202,7 @@ export default function WhatIfSandbox({
           max={Math.max(10_000, maxSandboxExtraDown)}
           step={2500}
           format="money"
+          trackUndo={false}
           hint={`Total in sandbox: ${money(whatIfAdjustedDown)} (${money(scenarioInputs.downPayment)} base${clampedExtraDown > 0 ? ` + ${money(clampedExtraDown)}` : ''})`}
           noStretch
         />

@@ -1,4 +1,12 @@
-import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { DEFAULT_INPUTS } from '../lib/defaults.js';
 import { load, save, KEYS } from '../lib/storage.js';
 import { readSharedFromHash } from '../lib/shareLink.js';
@@ -8,6 +16,7 @@ import { readSharedFromHash } from '../lib/shareLink.js';
 // page is also reflected on the amortization page, etc.
 
 const InputsContext = createContext(null);
+const MAX_HISTORY = 50;
 
 export function InputsProvider({ children }) {
   const [activeScenarioId, setActiveScenarioId] = useState(null);
@@ -23,6 +32,72 @@ export function InputsProvider({ children }) {
     return DEFAULT_INPUTS;
   });
 
+  const inputsRef = useRef(inputs);
+  const pastRef = useRef([]);
+  const futureRef = useRef([]);
+  const gesturingRef = useRef(false);
+  const gestureStartRef = useRef(null);
+  const extrasRef = useRef({ getExtras: () => ({}), applyExtras: () => {} });
+  const [historyTick, setHistoryTick] = useState(0);
+
+  useEffect(() => {
+    inputsRef.current = inputs;
+  }, [inputs]);
+
+  const bumpHistory = useCallback(() => {
+    setHistoryTick((n) => n + 1);
+  }, []);
+
+  const snapshotsEqual = useCallback((a, b) => {
+    if (!a || !b) return false;
+    return JSON.stringify(a) === JSON.stringify(b);
+  }, []);
+
+  const captureSnapshot = useCallback(() => {
+    return {
+      inputs: structuredClone(inputsRef.current),
+      extras: structuredClone(extrasRef.current.getExtras()),
+    };
+  }, []);
+
+  const pushPast = useCallback(
+    (snapshot) => {
+      const past = pastRef.current;
+      if (past.length > 0 && snapshotsEqual(past[past.length - 1], snapshot)) {
+        return;
+      }
+      pastRef.current = [...past.slice(-(MAX_HISTORY - 1)), snapshot];
+      futureRef.current = [];
+      bumpHistory();
+    },
+    [bumpHistory, snapshotsEqual],
+  );
+
+  const restoreSnapshot = useCallback((snapshot) => {
+    setInputs(snapshot.inputs);
+    extrasRef.current.applyExtras(snapshot.extras ?? {});
+  }, []);
+
+  const beginGesture = useCallback(() => {
+    if (gesturingRef.current) return;
+    gesturingRef.current = true;
+    gestureStartRef.current = captureSnapshot();
+    pushPast(gestureStartRef.current);
+  }, [captureSnapshot, pushPast]);
+
+  const endGesture = useCallback(() => {
+    if (!gesturingRef.current) return;
+    gesturingRef.current = false;
+    if (
+      gestureStartRef.current &&
+      snapshotsEqual(gestureStartRef.current, captureSnapshot())
+    ) {
+      pastRef.current = pastRef.current.slice(0, -1);
+      bumpHistory();
+    }
+    gestureStartRef.current = null;
+  }, [bumpHistory, captureSnapshot, snapshotsEqual]);
+
   // Persist to localStorage whenever inputs change
   useEffect(() => {
     save(KEYS.inputs, inputs);
@@ -33,23 +108,92 @@ export function InputsProvider({ children }) {
   // If you nudge one slider in a way that would break the chain, the
   // dependent sliders move along with you so the picture stays internally
   // consistent.
-  const update = (patch) => setInputs((prev) => applyCascades(prev, patch));
+  const snapshotFrom = useCallback((inputState) => {
+    return {
+      inputs: structuredClone(inputState),
+      extras: structuredClone(extrasRef.current.getExtras()),
+    };
+  }, []);
 
-  const reset = () => {
+  const update = useCallback(
+    (patch) => {
+      setInputs((prev) => {
+        if (!gesturingRef.current) {
+          pushPast(snapshotFrom(prev));
+        }
+        return applyCascades(prev, patch);
+      });
+    },
+    [pushPast, snapshotFrom],
+  );
+
+  const setInputsWithHistory = useCallback(
+    (next) => {
+      setInputs((prev) => {
+        pushPast(captureSnapshot());
+        return typeof next === 'function' ? next(prev) : next;
+      });
+    },
+    [captureSnapshot, pushPast],
+  );
+
+  const undo = useCallback(() => {
+    const past = pastRef.current;
+    if (past.length === 0) return;
+    const previous = past[past.length - 1];
+    pastRef.current = past.slice(0, -1);
+    futureRef.current = [captureSnapshot(), ...futureRef.current].slice(
+      0,
+      MAX_HISTORY,
+    );
+    restoreSnapshot(previous);
+    bumpHistory();
+  }, [bumpHistory, captureSnapshot, restoreSnapshot]);
+
+  const redo = useCallback(() => {
+    const future = futureRef.current;
+    if (future.length === 0) return;
+    const next = future[0];
+    futureRef.current = future.slice(1);
+    pastRef.current = [...pastRef.current, captureSnapshot()].slice(
+      -MAX_HISTORY,
+    );
+    restoreSnapshot(next);
+    bumpHistory();
+  }, [bumpHistory, captureSnapshot, restoreSnapshot]);
+
+  const reset = useCallback(() => {
+    pushPast(captureSnapshot());
     setActiveScenarioId(null);
     setInputs(DEFAULT_INPUTS);
-  };
+  }, [captureSnapshot, pushPast]);
+
+  const registerCalculatorExtras = useCallback((api) => {
+    extrasRef.current = api;
+  }, []);
+
+  const canUndo = pastRef.current.length > 0;
+  const canRedo = futureRef.current.length > 0;
 
   const value = useMemo(
     () => ({
       inputs,
-      setInputs,
+      setInputs: setInputsWithHistory,
       update,
       reset,
+      undo,
+      redo,
+      canUndo,
+      canRedo,
+      beginGesture,
+      endGesture,
+      registerCalculatorExtras,
       activeScenarioId,
       setActiveScenarioId,
     }),
-    [inputs, activeScenarioId]
+  // historyTick keeps undo/redo button disabled state in sync with the stacks
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [inputs, activeScenarioId, historyTick, update, reset, undo, redo, beginGesture, endGesture, registerCalculatorExtras, setInputsWithHistory],
   );
 
   return (

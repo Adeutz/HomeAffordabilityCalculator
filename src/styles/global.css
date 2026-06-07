@@ -757,6 +757,11 @@ input[type='range']::-moz-range-thumb {
   padding: 6px 10px;
   font-size: 13px;
 }
+.button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
+}
 
 /* ----------------------------------------------------------------------
    Big "what you can afford" hero number

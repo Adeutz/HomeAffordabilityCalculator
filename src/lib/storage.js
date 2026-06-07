@@ -36,4 +36,6 @@ export const KEYS = {
   theme: 'theme',
   /** Keeps planned home price from snapping to lender max when situation sliders move */
   stickyPlannedPrice: 'stickyPlannedPrice',
+  /** Remembers the mortgage payoff calculator's extra payments, dates, and recast settings */
+  payoffSettings: 'payoffSettings',
 };
