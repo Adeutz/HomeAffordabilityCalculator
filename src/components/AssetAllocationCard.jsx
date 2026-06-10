@@ -15,12 +15,15 @@ import {
   enable401kSplit,
   fundableBalanceTotal,
   countUnlockedBuckets,
+  emergencyFundLevel,
+  emergencyFundMonths,
+  monthlyExpenseBurn,
+  recommendedEmergencyFundDollars,
   liquidAfterClosing,
   normalizePcts,
   pctsToDollars,
   postPurchaseAllocation,
   POST_HOUSE_BUCKET,
-  RETIREMENT_401K_BUCKET,
 } from '../lib/assetAllocation.js';
 import { emergencyFundCheck } from '../lib/mortgage.js';
 import { money, percent } from '../lib/format.js';
@@ -40,9 +43,15 @@ export default function AssetAllocationCard({
   monthlyDebts,
   annualIncome,
 }) {
+  const burnParams = { annualIncome, monthlyHousing, monthlyDebts };
+  const emergencyTargetInitial = recommendedEmergencyFundDollars(burnParams);
+
   const [totalNetWorth, setTotalNetWorth] = useState(initialNetWorth);
   const [allocationPcts, setAllocationPcts] = useState(() =>
-    defaultAllocationPcts(initialNetWorth, currentSavings),
+    defaultAllocationPcts(initialNetWorth, currentSavings, false, {
+      cashNeededAtClosing,
+      emergencyTargetDollars: emergencyTargetInitial,
+    }),
   );
   const [houseFunding, setHouseFunding] = useState(cashNeededAtClosing);
   const [drawOrder, setDrawOrder] = useState(DEFAULT_DRAW_ORDER);
@@ -134,6 +143,26 @@ export default function AssetAllocationCard({
 
   const liquidRemaining = liquidAfterClosing(afterBalances);
 
+  const monthlyBurn = useMemo(
+    () => monthlyExpenseBurn(burnParams),
+    [annualIncome, monthlyHousing, monthlyDebts],
+  );
+
+  const emergencyTarget = useMemo(
+    () => monthlyBurn * 3,
+    [monthlyBurn],
+  );
+
+  const emergencyMonthsBefore = emergencyFundMonths(
+    balances.emergencyFund ?? 0,
+    monthlyBurn,
+  );
+  const emergencyMonthsAfter = emergencyFundMonths(
+    afterBalances.emergencyFund ?? 0,
+    monthlyBurn,
+  );
+  const emergencyLevelAfter = emergencyFundLevel(emergencyMonthsAfter);
+
   const emergency = useMemo(
     () =>
       emergencyFundCheck({
@@ -187,9 +216,30 @@ export default function AssetAllocationCard({
         include401k && (balances.retirement401k ?? 0) > 0
           ? ` Your 401(k) (${money(balances.retirement401k)}) can't be used for the down payment.`
           : '';
+      const emergencyNote =
+        (balances.emergencyFund ?? 0) > 0
+          ? ` Your emergency fund (${money(balances.emergencyFund)}) is protected and won't be tapped.`
+          : '';
       list.push({
         level: 'red',
-        text: `You're short ${money(funding.shortfall)} — not enough across fundable buckets to cover ${money(houseFunding)}.${retirementNote}`,
+        text: `You're short ${money(funding.shortfall)} — not enough across fundable buckets to cover ${money(houseFunding)}.${emergencyNote}${retirementNote}`,
+      });
+    }
+    if ((balances.emergencyFund ?? 0) < emergencyTarget * 0.95) {
+      list.push({
+        level: 'yellow',
+        text: `Emergency fund bucket (${money(balances.emergencyFund ?? 0)}) is below the 3-month target (${money(emergencyTarget)}). Consider allocating more before buying.`,
+      });
+    }
+    if (emergencyLevelAfter === 'red') {
+      list.push({
+        level: 'red',
+        text: `After closing, your emergency fund would cover only ~${emergencyMonthsAfter.toFixed(1)} months of expenses (${money(afterBalances.emergencyFund ?? 0)}). Aim for 3+ months in the protected bucket.`,
+      });
+    } else if (emergencyLevelAfter === 'yellow') {
+      list.push({
+        level: 'yellow',
+        text: `After closing, emergency fund covers ~${emergencyMonthsAfter.toFixed(1)} months (${money(afterBalances.emergencyFund ?? 0)}). Target is 3+ months (${money(emergencyTarget)}).`,
       });
     }
     if (funding.draws.otherHouse > 0) {
@@ -207,12 +257,12 @@ export default function AssetAllocationCard({
     if (emergency.level === 'red') {
       list.push({
         level: 'red',
-        text: `Only ~${Math.max(0, emergency.monthsCovered).toFixed(1)} months of expenses left in liquid cash (${money(liquidRemaining)}). Aim for 3+ months.`,
+        text: `Total liquid cash after closing (emergency + cash + brokerage): ${money(liquidRemaining)} — only ~${Math.max(0, emergency.monthsCovered).toFixed(1)} months of all expenses. Aim for 3+ months.`,
       });
     } else if (emergency.level === 'yellow') {
       list.push({
         level: 'yellow',
-        text: `Liquid cushion is tight: ~${emergency.monthsCovered.toFixed(1)} months of expenses (${money(liquidRemaining)} left).`,
+        text: `Total liquid after closing is tight: ~${emergency.monthsCovered.toFixed(1)} months of all expenses (${money(liquidRemaining)}).`,
       });
     }
     if (houseFunding < cashNeededAtClosing) {
@@ -230,6 +280,11 @@ export default function AssetAllocationCard({
     liquidRemaining,
     include401k,
     balances.retirement401k,
+    balances.emergencyFund,
+    afterBalances.emergencyFund,
+    emergencyTarget,
+    emergencyLevelAfter,
+    emergencyMonthsAfter,
   ]);
 
   const onAllocationChange = (key, pct) => {
@@ -296,11 +351,10 @@ export default function AssetAllocationCard({
   return (
     <Card title="Asset allocation (sandbox)">
       <p className="text-small muted mb-16">
-        Split your net worth, choose how much goes into this house, and see what's
-        left in brokerage and other buckets. Tap any dollar amount to type an exact
-        value — no scrolling needed. Lock a bucket (padlock icon) to keep its
-        share fixed while you adjust the others. This is a what-if — it does not
-        change your main inputs above.
+        Split your net worth — including a protected emergency fund bucket — choose
+        how much goes into this house, and see what's left elsewhere. Tap any
+        dollar amount to type an exact value. Lock a bucket to keep its share
+        fixed. Emergency fund and 401(k) are not used for the down payment.
       </p>
 
       <div className="allocation-money-row">
@@ -360,6 +414,7 @@ export default function AssetAllocationCard({
             pct={allocationPcts[bucket.key]}
             color={bucket.color}
             notFundable={bucket.fundable === false}
+            protectedLabel={bucket.protectedLabel}
             isPctLocked={isPctLocked}
             canToggleLock={canLockBucket(bucket.key)}
             onToggleLock={() => toggleBucketLock(bucket.key)}
@@ -380,6 +435,13 @@ export default function AssetAllocationCard({
         </div>
         );
       })}
+
+      <EmergencyFundReserveCard
+        dollars={balances.emergencyFund ?? 0}
+        months={emergencyMonthsBefore}
+        targetDollars={emergencyTarget}
+        targetMonths={3}
+      />
 
       <BeforePurchaseSplit
         balances={balances}
@@ -492,6 +554,12 @@ export default function AssetAllocationCard({
           pct={postPurchase.pcts.thisHouse}
         />
         <StatWithPct
+          label="Emergency fund after"
+          dollars={afterBalances.emergencyFund ?? 0}
+          pct={postPurchase.pcts.emergencyFund}
+          note={`~${emergencyMonthsAfter.toFixed(1)} mo · protected`}
+        />
+        <StatWithPct
           label="Brokerage left"
           dollars={postPurchase.dollars.brokerage}
           pct={postPurchase.pcts.brokerage}
@@ -517,6 +585,14 @@ export default function AssetAllocationCard({
         buckets={buckets}
       />
 
+      <EmergencyFundReserveCard
+        dollars={afterBalances.emergencyFund ?? 0}
+        months={emergencyMonthsAfter}
+        targetDollars={emergencyTarget}
+        targetMonths={3}
+        title="Emergency fund after closing"
+      />
+
       {warnings.length > 0 && (
         <div className="allocation-warnings mt-16">
           {warnings.map((w, i) => (
@@ -536,6 +612,7 @@ function BucketAmountLabel({
   pct,
   color,
   notFundable = false,
+  protectedLabel = "Can't fund house",
   isPctLocked = false,
   canToggleLock = true,
   onToggleLock,
@@ -549,7 +626,7 @@ function BucketAmountLabel({
         <span className="swatch" style={{ background: color }} />
         {label}
         {notFundable && (
-          <span className="allocation-locked-badge">Can't fund house</span>
+          <span className="allocation-locked-badge">{protectedLabel}</span>
         )}
         <button
           type="button"
@@ -597,6 +674,53 @@ function BucketAmountLabel({
   );
 }
 
+function EmergencyFundReserveCard({
+  title = 'Emergency fund reserve',
+  dollars,
+  months,
+  targetDollars,
+  targetMonths = 3,
+}) {
+  const level = emergencyFundLevel(months);
+  const widthPct = Math.min(100, (months / 6) * 100);
+  const pill =
+    level === 'green' ? 'Healthy' : level === 'yellow' ? 'Tight' : 'Low';
+
+  return (
+    <div className="indicator-card allocation-emergency-card mt-8">
+      <div className="indicator-head">
+        <div>
+          <div className="text-small muted">{title}</div>
+          <div style={{ fontSize: 22, fontWeight: 700 }}>
+            {months.toFixed(1)} months
+          </div>
+        </div>
+        <span className={`pill ${level}`}>
+          <span className="dot" />
+          {pill}
+        </span>
+      </div>
+      <div className="indicator-bar">
+        <div
+          className="fill"
+          style={{
+            width: `${widthPct}%`,
+            background: `var(--${level})`,
+          }}
+        />
+      </div>
+      <div className="text-tiny muted">
+        Protected bucket: <strong>{money(dollars)}</strong> · Target{' '}
+        {targetMonths} months: <strong>{money(targetDollars)}</strong>
+      </div>
+      <div className="text-tiny muted" style={{ marginTop: 4 }}>
+        This cash is not used for the down payment. Housing + debts + ~25% of
+        income for living costs = monthly burn.
+      </div>
+    </div>
+  );
+}
+
 function BeforePurchaseSplit({ balances, pcts, buckets, lockedKeys = [] }) {
   return (
     <div className="allocation-split-summary mt-8">
@@ -608,6 +732,7 @@ function BeforePurchaseSplit({ balances, pcts, buckets, lockedKeys = [] }) {
           dollars={balances[b.key]}
           pct={pcts[b.key]}
           notFundable={b.fundable === false}
+          protectedNote={b.protectedLabel}
           isPctLocked={lockedKeys.includes(b.key)}
         />
       ))}
@@ -628,14 +753,22 @@ function StatWithPct({ label, dollars, pct, note }) {
   );
 }
 
-function SplitRow({ label, color, dollars, pct, notFundable = false, isPctLocked = false }) {
+function SplitRow({
+  label,
+  color,
+  dollars,
+  pct,
+  notFundable = false,
+  protectedNote = "can't fund house",
+  isPctLocked = false,
+}) {
   return (
     <div className={`allocation-split-row ${isPctLocked ? 'is-locked' : ''}`}>
       <span className="swatch" style={{ background: color }} />
       <span className="allocation-split-label">
         {label}
         {notFundable && (
-          <span className="allocation-locked-inline"> · can't fund house</span>
+          <span className="allocation-locked-inline"> · {protectedNote.toLowerCase()}</span>
         )}
         {isPctLocked && (
           <span className="allocation-locked-inline"> · locked</span>
@@ -756,6 +889,8 @@ function PostPurchaseSplit({ pcts, dollars, buckets }) {
     { key: 'savedForHouse', label: 'Cash reserve (unused)', color: '#6b7c93' },
   ].filter((r) => (dollars[r.key] ?? 0) > 0);
 
+  const bucketByKey = Object.fromEntries(buckets.map((b) => [b.key, b]));
+
   return (
     <div className="mt-16">
       <div className="text-small muted mb-8">
@@ -769,7 +904,8 @@ function PostPurchaseSplit({ pcts, dollars, buckets }) {
             color={r.color}
             dollars={dollars[r.key]}
             pct={pcts[r.key]}
-            locked={r.key === RETIREMENT_401K_BUCKET.key}
+            notFundable={bucketByKey[r.key]?.fundable === false}
+            protectedNote={bucketByKey[r.key]?.protectedLabel ?? "can't fund house"}
           />
         ))}
       </div>
