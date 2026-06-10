@@ -42,29 +42,102 @@ function activeBucketKeys(include401k) {
   return allocationBuckets(include401k).map((b) => b.key);
 }
 
-/** Linked split: one bucket changes, others scale to keep 100%. */
-export function adjustAllocationSplit(currentPcts, changedKey, newValue, include401k = false) {
+function fixPctSum(next, keys, locked = new Set()) {
+  const sum = keys.reduce((s, k) => s + (next[k] ?? 0), 0);
+  const drift = 100 - sum;
+  if (Math.abs(drift) < 0.01) return next;
+  const adjustable = keys.filter((k) => !locked.has(k));
+  if (adjustable.length === 0) return next;
+  const last = adjustable[adjustable.length - 1];
+  return { ...next, [last]: Math.max(0, (next[last] ?? 0) + drift) };
+}
+
+/**
+ * Linked split with optional locks. Locked buckets keep their % when other
+ * buckets move. The bucket being edited always accepts the new value.
+ */
+export function adjustAllocationSplit(
+  currentPcts,
+  changedKey,
+  newValue,
+  include401k = false,
+  lockedKeys = [],
+) {
   const keys = activeBucketKeys(include401k);
-  const next = { ...currentPcts, retirement401k: include401k ? (currentPcts.retirement401k ?? 0) : 0 };
-  const clamped = Math.max(0, Math.min(100, newValue));
-  next[changedKey] = clamped;
+  const locked = new Set(
+    lockedKeys.filter((k) => keys.includes(k) && k !== changedKey),
+  );
 
-  const others = keys.filter((k) => k !== changedKey);
-  const otherSum = others.reduce((s, k) => s + (currentPcts[k] ?? 0), 0);
-  const room = 100 - clamped;
+  const clamped = Math.max(0, newValue);
+  const lockedSum = [...locked].reduce((s, k) => s + (currentPcts[k] ?? 0), 0);
+  const maxForChanged = Math.max(0, 100 - lockedSum);
+  const finalChanged = Math.min(clamped, maxForChanged);
+  const room = 100 - lockedSum - finalChanged;
 
-  if (otherSum <= 0) {
-    const even = room / others.length;
-    others.forEach((k) => {
-      next[k] = even;
+  const unlockedOthers = keys.filter(
+    (k) => k !== changedKey && !locked.has(k),
+  );
+
+  const next = Object.fromEntries(keys.map((k) => [k, currentPcts[k] ?? 0]));
+  locked.forEach((k) => {
+    next[k] = currentPcts[k] ?? 0;
+  });
+  next[changedKey] = finalChanged;
+
+  if (unlockedOthers.length === 0) {
+    return fixPctSum(next, keys, locked);
+  }
+
+  const unlockedOtherSum = unlockedOthers.reduce(
+    (s, k) => s + (currentPcts[k] ?? 0),
+    0,
+  );
+
+  if (unlockedOtherSum <= 0) {
+    const even = room / unlockedOthers.length;
+    unlockedOthers.forEach((k) => {
+      next[k] = Math.max(0, even);
     });
   } else {
-    others.forEach((k) => {
-      next[k] = ((currentPcts[k] ?? 0) / otherSum) * room;
+    unlockedOthers.forEach((k) => {
+      next[k] = ((currentPcts[k] ?? 0) / unlockedOtherSum) * room;
     });
   }
 
-  return normalizePcts(next, include401k);
+  return fixPctSum(next, keys, locked);
+}
+
+/** Set one bucket by dollar amount; others rebalance to keep the total net worth. */
+export function adjustAllocationSplitFromDollars(
+  totalNetWorth,
+  currentPcts,
+  changedKey,
+  newDollars,
+  include401k = false,
+  lockedKeys = [],
+) {
+  const clamped = Math.max(0, Math.round(newDollars));
+  if (totalNetWorth <= 0) {
+    const keys = activeBucketKeys(include401k);
+    const pcts = Object.fromEntries(
+      keys.map((k) => [k, k === changedKey && clamped > 0 ? 100 : 0]),
+    );
+    return {
+      totalNetWorth: clamped,
+      allocationPcts: normalizePcts(pcts, include401k),
+    };
+  }
+  const pct = Math.min(100, (clamped / totalNetWorth) * 100);
+  return {
+    totalNetWorth,
+    allocationPcts: adjustAllocationSplit(
+      currentPcts,
+      changedKey,
+      pct,
+      include401k,
+      lockedKeys,
+    ),
+  };
 }
 
 export function normalizePcts(pcts, include401k = false) {
@@ -196,6 +269,10 @@ export function enable401kSplit(currentPcts, retirement401kPct = 15) {
     next[b.key] = (currentPcts[b.key] ?? 0) * scale;
   });
   return normalizePcts(next, true);
+}
+
+export function countUnlockedBuckets(bucketKeys, lockedKeys) {
+  return bucketKeys.filter((k) => !lockedKeys.includes(k)).length;
 }
 
 export const DEFAULT_DRAW_ORDER = ['brokerage', 'otherInvestments', 'otherHouse'];

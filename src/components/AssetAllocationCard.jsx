@@ -2,8 +2,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 import Card from './Card.jsx';
 import Slider from './Slider.jsx';
+import EditableMoney from './EditableMoney.jsx';
 import {
   adjustAllocationSplit,
+  adjustAllocationSplitFromDollars,
   allocationBuckets,
   balancesAfterDraw,
   computeHouseFunding,
@@ -12,6 +14,7 @@ import {
   DRAW_SOURCES,
   enable401kSplit,
   fundableBalanceTotal,
+  countUnlockedBuckets,
   liquidAfterClosing,
   normalizePcts,
   pctsToDollars,
@@ -44,7 +47,13 @@ export default function AssetAllocationCard({
   const [houseFunding, setHouseFunding] = useState(cashNeededAtClosing);
   const [drawOrder, setDrawOrder] = useState(DEFAULT_DRAW_ORDER);
   const [include401k, setInclude401k] = useState(false);
+  const [lockedKeys, setLockedKeys] = useState([]);
   const { registerCalculatorExtras, recordUndoPoint } = useInputs();
+
+  const bucketKeys = useMemo(
+    () => allocationBuckets(include401k).map((b) => b.key),
+    [include401k],
+  );
 
   const buckets = useMemo(
     () => allocationBuckets(include401k),
@@ -75,6 +84,7 @@ export default function AssetAllocationCard({
         houseFunding,
         drawOrder,
         include401k,
+        lockedKeys,
       }),
       applyExtras: (data) => {
         if (data.totalNetWorth != null) setTotalNetWorth(data.totalNetWorth);
@@ -82,6 +92,9 @@ export default function AssetAllocationCard({
         if (data.houseFunding != null) setHouseFunding(data.houseFunding);
         if (data.drawOrder) setDrawOrder(data.drawOrder);
         if (data.include401k != null) setInclude401k(data.include401k);
+        if ('lockedKeys' in data && Array.isArray(data.lockedKeys)) {
+          setLockedKeys(data.lockedKeys);
+        }
       },
     });
   }, [
@@ -90,6 +103,7 @@ export default function AssetAllocationCard({
     houseFunding,
     drawOrder,
     include401k,
+    lockedKeys,
     registerCalculatorExtras,
   ]);
 
@@ -219,12 +233,48 @@ export default function AssetAllocationCard({
   ]);
 
   const onAllocationChange = (key, pct) => {
-    setAllocationPcts((cur) => adjustAllocationSplit(cur, key, pct, include401k));
+    setAllocationPcts((cur) =>
+      adjustAllocationSplit(cur, key, pct, include401k, lockedKeys),
+    );
   };
+
+  const onAllocationDollarsChange = (key, dollars) => {
+    const result = adjustAllocationSplitFromDollars(
+      totalNetWorth,
+      allocationPcts,
+      key,
+      dollars,
+      include401k,
+      lockedKeys,
+    );
+    setTotalNetWorth(result.totalNetWorth);
+    setAllocationPcts(result.allocationPcts);
+  };
+
+  const toggleBucketLock = (key) => {
+    recordUndoPoint();
+    setLockedKeys((prev) => {
+      if (prev.includes(key)) {
+        return prev.filter((k) => k !== key);
+      }
+      if (countUnlockedBuckets(bucketKeys, prev) <= 1) {
+        return prev;
+      }
+      return [...prev, key];
+    });
+  };
+
+  const canLockBucket = (key) =>
+    lockedKeys.includes(key) || countUnlockedBuckets(bucketKeys, lockedKeys) > 1;
 
   const onToggle401k = (enabled) => {
     recordUndoPoint();
     setInclude401k(enabled);
+    setLockedKeys((prev) =>
+      prev.filter((k) =>
+        allocationBuckets(enabled).some((b) => b.key === k),
+      ),
+    );
     setAllocationPcts((cur) =>
       enabled ? enable401kSplit(cur) : normalizePcts(cur, false),
     );
@@ -247,12 +297,24 @@ export default function AssetAllocationCard({
     <Card title="Asset allocation (sandbox)">
       <p className="text-small muted mb-16">
         Split your net worth, choose how much goes into this house, and see what's
-        left in brokerage and other buckets. This is a what-if — it does not change
-        your main inputs above.
+        left in brokerage and other buckets. Tap any dollar amount to type an exact
+        value — no scrolling needed. Lock a bucket (padlock icon) to keep its
+        share fixed while you adjust the others. This is a what-if — it does not
+        change your main inputs above.
       </p>
 
+      <div className="allocation-money-row">
+        <span className="allocation-money-label">Total net worth</span>
+        <EditableMoney
+          value={totalNetWorth}
+          onChange={setTotalNetWorth}
+          onEditStart={recordUndoPoint}
+          ariaLabel="Total net worth"
+        />
+      </div>
+
       <Slider
-        label="Total net worth"
+        label="Quick adjust"
         value={totalNetWorth}
         onChange={setTotalNetWorth}
         min={0}
@@ -280,17 +342,30 @@ export default function AssetAllocationCard({
       <div className="divider" />
 
       <div className="text-small muted mb-8">
-        <strong>Before purchase</strong> — split 100% across buckets
+        <strong>Before purchase</strong> — split 100% across buckets. Tap{' '}
+        <span className="allocation-lock-hint-icon" aria-hidden="true">🔒</span>{' '}
+        to lock a share in place.
       </div>
 
-      {buckets.map((bucket) => (
-        <div key={bucket.key} className="allocation-bucket-block">
+      {buckets.map((bucket) => {
+        const isPctLocked = lockedKeys.includes(bucket.key);
+        return (
+        <div
+          key={bucket.key}
+          className={`allocation-bucket-block ${isPctLocked ? 'is-locked' : ''}`}
+        >
           <BucketAmountLabel
             label={bucket.label}
             dollars={balances[bucket.key]}
             pct={allocationPcts[bucket.key]}
             color={bucket.color}
-            locked={bucket.fundable === false}
+            notFundable={bucket.fundable === false}
+            isPctLocked={isPctLocked}
+            canToggleLock={canLockBucket(bucket.key)}
+            onToggleLock={() => toggleBucketLock(bucket.key)}
+            onDollarsChange={(d) => onAllocationDollarsChange(bucket.key, d)}
+            onEditStart={recordUndoPoint}
+            maxDollars={totalNetWorth}
           />
           <Slider
             label={`${bucket.label} share`}
@@ -303,14 +378,31 @@ export default function AssetAllocationCard({
             noStretch
           />
         </div>
-      ))}
+        );
+      })}
 
-      <BeforePurchaseSplit balances={balances} pcts={allocationPcts} buckets={buckets} />
+      <BeforePurchaseSplit
+        balances={balances}
+        pcts={allocationPcts}
+        buckets={buckets}
+        lockedKeys={lockedKeys}
+      />
 
       <div className="divider" />
 
+      <div className="allocation-money-row">
+        <span className="allocation-money-label">Put into this house</span>
+        <EditableMoney
+          value={houseFunding}
+          onChange={setHouseFunding}
+          onEditStart={recordUndoPoint}
+          max={maxHouseFunding}
+          ariaLabel="Amount to put into this house"
+        />
+      </div>
+
       <Slider
-        label="Put into this house (down + extra)"
+        label="Quick adjust"
         value={houseFunding}
         onChange={setHouseFunding}
         min={0}
@@ -438,23 +530,74 @@ export default function AssetAllocationCard({
   );
 }
 
-function BucketAmountLabel({ label, dollars, pct, color, locked = false }) {
+function BucketAmountLabel({
+  label,
+  dollars,
+  pct,
+  color,
+  notFundable = false,
+  isPctLocked = false,
+  canToggleLock = true,
+  onToggleLock,
+  onDollarsChange,
+  onEditStart,
+  maxDollars,
+}) {
   return (
     <div className="allocation-bucket-header">
       <span className="allocation-bucket-name">
         <span className="swatch" style={{ background: color }} />
         {label}
-        {locked && <span className="allocation-locked-badge">Can't fund house</span>}
+        {notFundable && (
+          <span className="allocation-locked-badge">Can't fund house</span>
+        )}
+        <button
+          type="button"
+          className={`allocation-lock-btn ${isPctLocked ? 'active' : ''}`}
+          onClick={onToggleLock}
+          disabled={!canToggleLock && !isPctLocked}
+          aria-label={
+            isPctLocked
+              ? `Unlock ${label} share`
+              : canToggleLock
+                ? `Lock ${label} share`
+                : 'At least one bucket must stay unlocked'
+          }
+          title={
+            isPctLocked
+              ? 'Unlock — other buckets can change this share'
+              : canToggleLock
+                ? 'Lock — other buckets will not change this share'
+                : 'Keep at least one bucket unlocked'
+          }
+        >
+          {isPctLocked ? (
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M17 8h-1V6a4 4 0 0 0-8 0v2H7a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V10a2 2 0 0 0-2-2zm-3 0H10V6a2 2 0 0 1 4 0v2z" />
+            </svg>
+          ) : (
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+              <path d="M7 10V7a5 5 0 0 1 9.9-1" strokeLinecap="round" />
+              <rect x="5" y="10" width="14" height="12" rx="2" />
+            </svg>
+          )}
+        </button>
       </span>
       <span className="allocation-bucket-values">
-        <strong>{money(dollars)}</strong>
-        <span className="muted"> · {percent(pct, 0)}</span>
+        <EditableMoney
+          value={dollars}
+          onChange={onDollarsChange}
+          onEditStart={onEditStart}
+          max={maxDollars}
+          ariaLabel={`${label} dollar amount`}
+        />
+        <span className="muted allocation-bucket-pct"> · {percent(pct, 0)}</span>
       </span>
     </div>
   );
 }
 
-function BeforePurchaseSplit({ balances, pcts, buckets }) {
+function BeforePurchaseSplit({ balances, pcts, buckets, lockedKeys = [] }) {
   return (
     <div className="allocation-split-summary mt-8">
       {buckets.map((b) => (
@@ -464,7 +607,8 @@ function BeforePurchaseSplit({ balances, pcts, buckets }) {
           color={b.color}
           dollars={balances[b.key]}
           pct={pcts[b.key]}
-          locked={b.fundable === false}
+          notFundable={b.fundable === false}
+          isPctLocked={lockedKeys.includes(b.key)}
         />
       ))}
     </div>
@@ -484,13 +628,18 @@ function StatWithPct({ label, dollars, pct, note }) {
   );
 }
 
-function SplitRow({ label, color, dollars, pct, locked = false }) {
+function SplitRow({ label, color, dollars, pct, notFundable = false, isPctLocked = false }) {
   return (
-    <div className="allocation-split-row">
+    <div className={`allocation-split-row ${isPctLocked ? 'is-locked' : ''}`}>
       <span className="swatch" style={{ background: color }} />
       <span className="allocation-split-label">
         {label}
-        {locked && <span className="allocation-locked-inline"> · can't fund house</span>}
+        {notFundable && (
+          <span className="allocation-locked-inline"> · can't fund house</span>
+        )}
+        {isPctLocked && (
+          <span className="allocation-locked-inline"> · locked</span>
+        )}
       </span>
       <span className="allocation-split-values">
         <strong>{money(dollars)}</strong>
