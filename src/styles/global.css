@@ -1417,6 +1417,10 @@ th:first-child, td:first-child { text-align: left; }
 .allocation-legend-value {
   font-weight: 600;
   white-space: nowrap;
+  text-align: right;
+}
+.allocation-legend-value .muted {
+  font-weight: 500;
 }
 .draw-priority-list {
   display: flex;
@@ -1441,9 +1445,85 @@ th:first-child, td:first-child { text-align: left; }
 .draw-priority-label {
   font-size: 14px;
   font-weight: 500;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.draw-priority-balance {
+  font-weight: 400;
+  line-height: 1.3;
 }
 .draw-priority-amount {
   text-align: right;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.allocation-401k-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0 0 16px;
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  font-size: 14px;
+  line-height: 1.4;
+  cursor: pointer;
+}
+.allocation-401k-toggle input {
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  flex-shrink: 0;
+  accent-color: var(--brand);
+}
+.allocation-locked-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  vertical-align: middle;
+}
+.allocation-locked-inline {
+  color: var(--muted);
+  font-weight: 400;
+  font-size: 12px;
+}
+.allocation-bucket-block {
+  margin-bottom: 4px;
+}
+.allocation-bucket-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin: 12px 0 4px;
+  font-size: 14px;
+}
+.allocation-bucket-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  min-width: 0;
+}
+.allocation-bucket-values {
+  white-space: nowrap;
+  font-size: 14px;
+}
+.allocation-split-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 .draw-priority-actions {
   display: flex;
@@ -1476,14 +1556,16 @@ th:first-child, td:first-child { text-align: left; }
 }
 .allocation-split-label {
   grid-column: 2;
+  min-width: 0;
 }
-.allocation-split-pct {
+.allocation-split-values {
   grid-column: 3;
-  font-weight: 600;
   text-align: right;
+  white-space: nowrap;
+  font-size: 13px;
 }
 .allocation-split-bar-wrap {
-  grid-column: 2 / 4;
+  grid-column: 1 / 4;
   height: 6px;
   background: var(--bg-soft);
   border-radius: 3px;

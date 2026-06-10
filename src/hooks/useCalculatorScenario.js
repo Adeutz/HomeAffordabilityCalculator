@@ -105,7 +105,7 @@ export function useCalculatorScenario() {
     : scenarioPrice ?? lenderMaxPrice;
 
   useEffect(() => {
-    registerCalculatorExtras({
+    return registerCalculatorExtras('scenario', {
       getExtras: () => ({
         scenarioPrice,
         stickyPlannedPrice,

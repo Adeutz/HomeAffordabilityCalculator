@@ -37,7 +37,8 @@ export function InputsProvider({ children }) {
   const futureRef = useRef([]);
   const gesturingRef = useRef(false);
   const gestureStartRef = useRef(null);
-  const extrasRef = useRef({ getExtras: () => ({}), applyExtras: () => {} });
+  /** @type {React.MutableRefObject<Map<string, { getExtras: () => object, applyExtras: (data: object) => void }>>} */
+  const extrasApisRef = useRef(new Map());
   const [historyTick, setHistoryTick] = useState(0);
 
   useEffect(() => {
@@ -53,12 +54,36 @@ export function InputsProvider({ children }) {
     return JSON.stringify(a) === JSON.stringify(b);
   }, []);
 
+  const captureExtras = useCallback(() => {
+    const out = {};
+    extrasApisRef.current.forEach((api, key) => {
+      out[key] = structuredClone(api.getExtras());
+    });
+    return out;
+  }, []);
+
+  const applyExtrasSnapshot = useCallback((extras) => {
+    if (!extras || typeof extras !== 'object') return;
+    // Older undo entries stored scenario fields at the top level.
+    if (
+      'scenarioPrice' in extras ||
+      'stickyPlannedPrice' in extras ||
+      'lastSyncedLenderMax' in extras
+    ) {
+      extrasApisRef.current.get('scenario')?.applyExtras(extras);
+      return;
+    }
+    Object.entries(extras).forEach(([key, data]) => {
+      extrasApisRef.current.get(key)?.applyExtras(data ?? {});
+    });
+  }, []);
+
   const captureSnapshot = useCallback(() => {
     return {
       inputs: structuredClone(inputsRef.current),
-      extras: structuredClone(extrasRef.current.getExtras()),
+      extras: captureExtras(),
     };
-  }, []);
+  }, [captureExtras]);
 
   const pushPast = useCallback(
     (snapshot) => {
@@ -75,8 +100,8 @@ export function InputsProvider({ children }) {
 
   const restoreSnapshot = useCallback((snapshot) => {
     setInputs(snapshot.inputs);
-    extrasRef.current.applyExtras(snapshot.extras ?? {});
-  }, []);
+    applyExtrasSnapshot(snapshot.extras);
+  }, [applyExtrasSnapshot]);
 
   const beginGesture = useCallback(() => {
     if (gesturingRef.current) return;
@@ -108,12 +133,19 @@ export function InputsProvider({ children }) {
   // If you nudge one slider in a way that would break the chain, the
   // dependent sliders move along with you so the picture stays internally
   // consistent.
-  const snapshotFrom = useCallback((inputState) => {
-    return {
+  const snapshotFrom = useCallback(
+    (inputState) => ({
       inputs: structuredClone(inputState),
-      extras: structuredClone(extrasRef.current.getExtras()),
-    };
-  }, []);
+      extras: captureExtras(),
+    }),
+    [captureExtras],
+  );
+
+  const recordUndoPoint = useCallback(() => {
+    if (!gesturingRef.current) {
+      pushPast(captureSnapshot());
+    }
+  }, [captureSnapshot, pushPast]);
 
   const update = useCallback(
     (patch) => {
@@ -168,8 +200,11 @@ export function InputsProvider({ children }) {
     setInputs(DEFAULT_INPUTS);
   }, [captureSnapshot, pushPast]);
 
-  const registerCalculatorExtras = useCallback((api) => {
-    extrasRef.current = api;
+  const registerCalculatorExtras = useCallback((key, api) => {
+    extrasApisRef.current.set(key, api);
+    return () => {
+      extrasApisRef.current.delete(key);
+    };
   }, []);
 
   const canUndo = pastRef.current.length > 0;
@@ -187,13 +222,14 @@ export function InputsProvider({ children }) {
       canRedo,
       beginGesture,
       endGesture,
+      recordUndoPoint,
       registerCalculatorExtras,
       activeScenarioId,
       setActiveScenarioId,
     }),
   // historyTick keeps undo/redo button disabled state in sync with the stacks
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [inputs, activeScenarioId, historyTick, update, reset, undo, redo, beginGesture, endGesture, registerCalculatorExtras, setInputsWithHistory],
+    [inputs, activeScenarioId, historyTick, update, reset, undo, redo, beginGesture, endGesture, recordUndoPoint, registerCalculatorExtras, setInputsWithHistory],
   );
 
   return (

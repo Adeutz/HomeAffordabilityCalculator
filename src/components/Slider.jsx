@@ -25,7 +25,7 @@ export default function Slider({
   // Useful when you have visuals positioned relative to the slider that
   // would shift if the slider stretched.
   noStretch = false,
-  // Sandboxed sliders (what-if panels) should pass false so undo only tracks real inputs.
+  // Pass false only for sliders that are not registered with undo history.
   trackUndo = true,
 }) {
   const { beginGesture, endGesture } = useInputs();
