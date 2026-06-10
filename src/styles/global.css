@@ -1384,6 +1384,140 @@ th:first-child, td:first-child { text-align: left; }
   }
 }
 
+/* Asset allocation sandbox card */
+.allocation-charts {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 20px;
+}
+@media (min-width: 640px) {
+  .allocation-charts {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+.allocation-chart-block {
+  min-width: 0;
+}
+.allocation-legend {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  font-size: 12px;
+}
+.allocation-legend li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.allocation-legend-label {
+  flex: 1;
+  min-width: 0;
+}
+.allocation-legend-value {
+  font-weight: 600;
+  white-space: nowrap;
+}
+.draw-priority-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.draw-priority-row {
+  display: grid;
+  grid-template-columns: 28px 1fr auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+}
+.draw-priority-rank {
+  font-weight: 700;
+  color: var(--brand);
+  font-size: 15px;
+}
+.draw-priority-label {
+  font-size: 14px;
+  font-weight: 500;
+}
+.draw-priority-amount {
+  text-align: right;
+}
+.draw-priority-actions {
+  display: flex;
+  gap: 4px;
+}
+.funding-summary {
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+}
+.funding-summary-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  margin-top: 4px;
+}
+.funding-summary-row strong {
+  margin-left: auto;
+}
+.allocation-split-row {
+  display: grid;
+  grid-template-columns: 12px 1fr auto;
+  grid-template-rows: auto auto;
+  gap: 4px 8px;
+  align-items: center;
+  margin-bottom: 10px;
+  font-size: 13px;
+}
+.allocation-split-label {
+  grid-column: 2;
+}
+.allocation-split-pct {
+  grid-column: 3;
+  font-weight: 600;
+  text-align: right;
+}
+.allocation-split-bar-wrap {
+  grid-column: 2 / 4;
+  height: 6px;
+  background: var(--bg-soft);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.allocation-split-bar {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  min-width: 2px;
+}
+.allocation-warnings {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.allocation-warning {
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.45;
+  border: 1px solid var(--border);
+}
+.allocation-warning.red {
+  background: var(--red-soft);
+  border-color: var(--red);
+  color: var(--text);
+}
+.allocation-warning.yellow {
+  background: var(--yellow-soft, rgba(212, 155, 0, 0.12));
+  border-color: var(--yellow, #d49b00);
+  color: var(--text);
+}
+
 /* PDF print mode tweaks (so exported PDFs look clean) */
 .pdf-export {
   background: #ffffff !important;

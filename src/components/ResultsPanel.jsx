@@ -16,6 +16,7 @@ import TaxBenefitCard from './TaxBenefitCard.jsx';
 import DownPaymentBumpCompare from './DownPaymentBumpCompare.jsx';
 import MortgagePayoffCalculator from './MortgagePayoffCalculator.jsx';
 import RecastScenarioCards from './RecastScenarioCards.jsx';
+import AssetAllocationCard from './AssetAllocationCard.jsx';
 import { money } from '../lib/format.js';
 import { estimateMortgageTaxBenefit } from '../lib/taxes.js';
 
@@ -342,6 +343,19 @@ export default function ResultsPanel({ scenario }) {
           closingCosts={closingCosts}
           currentBreakdown={breakdown}
           recastInfo={recastInfo}
+        />
+      )}
+
+      {isTargetMode && (
+        <AssetAllocationCard
+          totalNetWorth={inputs.totalNetWorth}
+          currentSavings={inputs.currentSavings}
+          cashNeededAtClosing={inputs.downPayment + closingCosts}
+          downPayment={inputs.downPayment}
+          closingCosts={closingCosts}
+          monthlyHousing={breakdown.total}
+          monthlyDebts={inputs.monthlyDebts}
+          annualIncome={inputs.annualIncome}
         />
       )}
     </div>
