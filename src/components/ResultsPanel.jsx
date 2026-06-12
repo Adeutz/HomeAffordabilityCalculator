@@ -348,11 +348,11 @@ export default function ResultsPanel({ scenario }) {
 
       {isTargetMode && (
         <AssetAllocationCard
-          totalNetWorth={inputs.totalNetWorth}
           currentSavings={inputs.currentSavings}
           cashNeededAtClosing={inputs.downPayment + closingCosts}
           downPayment={inputs.downPayment}
           closingCosts={closingCosts}
+          loanAmount={loanAmount}
           monthlyHousing={breakdown.total}
           monthlyDebts={inputs.monthlyDebts}
           annualIncome={inputs.annualIncome}
