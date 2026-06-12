@@ -4,10 +4,14 @@ import Slider from './Slider.jsx';
 import EditableMoney from './EditableMoney.jsx';
 import {
   computePayoffPlan,
+  EXPECTED_MARKET_RETURN_PCT,
+  idealMortgageBalances,
   monthlyExpenseBurn,
   PAYOFF_ACCOUNTS,
+  payoffVsInvest,
 } from '../lib/payoffPlan.js';
-import { money } from '../lib/format.js';
+import { estimateNet } from '../lib/taxes.js';
+import { money, percent } from '../lib/format.js';
 import { useInputs } from '../state/InputsContext.jsx';
 
 /**
@@ -24,6 +28,11 @@ export default function AssetAllocationCard({
   monthlyHousing,
   monthlyDebts,
   annualIncome,
+  interestRate,
+  loanTermYears,
+  stateAbbrev,
+  filingStatus,
+  effectiveTaxRateOverride,
 }) {
   const { registerCalculatorExtras, recordUndoPoint } = useInputs();
 
@@ -37,6 +46,7 @@ export default function AssetAllocationCard({
   const [emergencyMonths, setEmergencyMonths] = useState(3);
   const [sinkingFunds, setSinkingFunds] = useState(0);
   const [loanOutstanding, setLoanOutstanding] = useState(loanAmount);
+  const [sandboxIncome, setSandboxIncome] = useState(annualIncome);
 
   useEffect(() => {
     return registerCalculatorExtras('assetAllocation', {
@@ -45,12 +55,14 @@ export default function AssetAllocationCard({
         emergencyMonths,
         sinkingFunds,
         loanOutstanding,
+        sandboxIncome,
       }),
       applyExtras: (data) => {
         if (data.balances) setBalances(data.balances);
         if (data.emergencyMonths != null) setEmergencyMonths(data.emergencyMonths);
         if (data.sinkingFunds != null) setSinkingFunds(data.sinkingFunds);
         if (data.loanOutstanding != null) setLoanOutstanding(data.loanOutstanding);
+        if (data.sandboxIncome != null) setSandboxIncome(data.sandboxIncome);
       },
     });
   }, [
@@ -58,6 +70,7 @@ export default function AssetAllocationCard({
     emergencyMonths,
     sinkingFunds,
     loanOutstanding,
+    sandboxIncome,
     registerCalculatorExtras,
   ]);
 
@@ -81,6 +94,39 @@ export default function AssetAllocationCard({
   );
 
   const canPayOff = plan.shortfall <= 0 && plan.reserveShortfall <= 0;
+
+  const sandboxNetAnnual = useMemo(() => {
+    const normalizedOverride =
+      effectiveTaxRateOverride === '' || effectiveTaxRateOverride == null
+        ? null
+        : Number(effectiveTaxRateOverride);
+    return estimateNet({
+      grossAnnual: sandboxIncome,
+      stateAbbrev,
+      filingStatus,
+      overridePct: normalizedOverride,
+    }).net;
+  }, [sandboxIncome, stateAbbrev, filingStatus, effectiveTaxRateOverride]);
+
+  const idealBalances = useMemo(
+    () =>
+      idealMortgageBalances({
+        grossAnnual: sandboxIncome,
+        netAnnual: sandboxNetAnnual,
+        annualRatePct: interestRate,
+        termYears: loanTermYears,
+      }),
+    [sandboxIncome, sandboxNetAnnual, interestRate, loanTermYears],
+  );
+
+  const investCompare = useMemo(
+    () =>
+      payoffVsInvest({
+        loanOutstanding,
+        mortgageRatePct: interestRate,
+      }),
+    [loanOutstanding, interestRate],
+  );
 
   const setBalance = (key, value) => {
     setBalances((prev) => ({ ...prev, [key]: Math.max(0, value) }));
@@ -159,6 +205,58 @@ export default function AssetAllocationCard({
             : `Full loan at purchase from your inputs: ${money(loanAmount)}.`
         }
       />
+
+      {/* ---- Ideal mortgage balance ---- */}
+      <div className="text-small muted mb-8" style={{ marginTop: 16 }}>
+        <strong>Ideal mortgage balance for your income</strong>
+      </div>
+
+      <div className="allocation-money-row">
+        <span className="allocation-money-label">
+          Income to base it on
+          <span className="text-tiny muted" style={{ display: 'block', fontWeight: 400 }}>
+            Gross per year — sandbox only, doesn't change your main inputs
+          </span>
+        </span>
+        <EditableMoney
+          value={sandboxIncome}
+          onChange={(v) => setSandboxIncome(Math.max(0, v))}
+          onEditStart={recordUndoPoint}
+          ariaLabel="Income for ideal mortgage balance"
+        />
+      </div>
+
+      <Slider
+        label="Quick adjust income"
+        value={sandboxIncome}
+        onChange={setSandboxIncome}
+        min={0}
+        max={Math.max(500_000, sandboxIncome)}
+        step={1_000}
+        hint={`Take-home estimate: ${money(sandboxNetAnnual)}/yr (${money(sandboxNetAnnual / 12)}/mo).`}
+      />
+
+      <IdealBalanceRow
+        label="28% rule (lender style)"
+        detail={`P&I ≤ 28% of gross pay → ${money(idealBalances.rule28.monthlyPayment)}/mo over ${loanTermYears} yrs at ${percent(interestRate, 2)}`}
+        idealBalance={idealBalances.rule28.balance}
+        loanOutstanding={loanOutstanding}
+      />
+      <IdealBalanceRow
+        label="Dave Ramsey (conservative)"
+        detail={`Payment ≤ 25% of take-home pay on a 15-yr loan at ${percent(interestRate, 2)}`}
+        idealBalance={idealBalances.ramsey.balance}
+        loanOutstanding={loanOutstanding}
+      />
+
+      <div
+        className={`allocation-warning ${investCompare.investWins ? 'yellow' : 'green'}`}
+        style={{ marginTop: 8 }}
+      >
+        {investCompare.investWins
+          ? `Net worth growth: your ${percent(interestRate, 2)} mortgage is below the ~${EXPECTED_MARKET_RETURN_PCT}% long-run market average. Mathematically, investing the leftover beats rushing the payoff by about ${money(investCompare.annualDollarEdge)}/yr on this balance — but the market return isn't guaranteed and the payoff is.`
+          : `Net worth growth: your ${percent(interestRate, 2)} mortgage costs more than the ~${EXPECTED_MARKET_RETURN_PCT}% long-run market average. Paying it off is the better deal — a guaranteed ${percent(interestRate, 2)} return, worth about ${money(investCompare.annualDollarEdge)}/yr versus investing.`}
+      </div>
 
       <div className="divider" />
 
@@ -265,6 +363,35 @@ export default function AssetAllocationCard({
         loanAmount={loanOutstanding}
       />
     </Card>
+  );
+}
+
+function IdealBalanceRow({ label, detail, idealBalance, loanOutstanding }) {
+  const over = loanOutstanding - idealBalance;
+  const within = over <= 0;
+  return (
+    <div className="funding-summary" style={{ marginTop: 8 }}>
+      <div className="flex-between" style={{ gap: 8 }}>
+        <div style={{ minWidth: 0 }}>
+          <div className="text-small" style={{ fontWeight: 600 }}>
+            {label}
+          </div>
+          <div className="text-tiny muted">{detail}</div>
+        </div>
+        <div style={{ textAlign: 'right', flexShrink: 0 }}>
+          <div style={{ fontWeight: 700 }}>{money(idealBalance)}</div>
+          <span className={`pill ${within ? 'green' : 'yellow'}`}>
+            <span className="dot" />
+            {within ? 'Within target' : 'Over target'}
+          </span>
+        </div>
+      </div>
+      <div className="text-tiny muted" style={{ marginTop: 6 }}>
+        {within
+          ? `Your ${money(loanOutstanding)} balance is ${money(-over)} under this target — room to spare.`
+          : `Pay down ~${money(over)} to bring your ${money(loanOutstanding)} balance to this target.`}
+      </div>
+    </div>
   );
 }
 

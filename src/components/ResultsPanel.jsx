@@ -356,6 +356,11 @@ export default function ResultsPanel({ scenario }) {
           monthlyHousing={breakdown.total}
           monthlyDebts={inputs.monthlyDebts}
           annualIncome={inputs.annualIncome}
+          interestRate={inputs.interestRate}
+          loanTermYears={inputs.loanTermYears}
+          stateAbbrev={inputs.stateAbbrev}
+          filingStatus={inputs.filingStatus}
+          effectiveTaxRateOverride={inputs.effectiveTaxRateOverride}
         />
       )}
     </div>

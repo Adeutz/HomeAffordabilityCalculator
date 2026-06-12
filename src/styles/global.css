@@ -1705,6 +1705,11 @@ th:first-child, td:first-child { text-align: left; }
   border-color: var(--red);
   color: var(--text);
 }
+.allocation-warning.green {
+  background: var(--green-soft, rgba(0, 166, 99, 0.12));
+  border-color: var(--green);
+  color: var(--text);
+}
 .allocation-warning.yellow {
   background: var(--yellow-soft, rgba(212, 155, 0, 0.12));
   border-color: var(--yellow, #d49b00);

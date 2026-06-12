@@ -30,6 +30,68 @@ export function monthlyExpenseBurn({ annualIncome, monthlyHousing, monthlyDebts 
 }
 
 /**
+ * Biggest loan balance a given monthly payment can support (present value
+ * of the payment stream at the loan's rate).
+ */
+export function loanBalanceForPayment({ monthlyPayment, annualRatePct, termYears }) {
+  const n = Math.max(1, Math.round(termYears * 12));
+  const r = annualRatePct / 100 / 12;
+  if (monthlyPayment <= 0) return 0;
+  if (r <= 0) return monthlyPayment * n;
+  return (monthlyPayment * (1 - Math.pow(1 + r, -n))) / r;
+}
+
+// Long-run stock market average we assume for the invest-vs-payoff call.
+export const EXPECTED_MARKET_RETURN_PCT = 7;
+
+/**
+ * Two payment-based "ideal mortgage balance" benchmarks:
+ *  - 28% rule: P&I payment ≤ 28% of GROSS monthly income, at your rate & term.
+ *  - Dave Ramsey: payment ≤ 25% of NET (take-home) monthly income on a 15-year loan.
+ */
+export function idealMortgageBalances({
+  grossAnnual,
+  netAnnual,
+  annualRatePct,
+  termYears,
+}) {
+  const rule28 = loanBalanceForPayment({
+    monthlyPayment: (grossAnnual / 12) * 0.28,
+    annualRatePct,
+    termYears,
+  });
+  const ramsey = loanBalanceForPayment({
+    monthlyPayment: (netAnnual / 12) * 0.25,
+    annualRatePct,
+    termYears: 15,
+  });
+  return {
+    rule28: { balance: rule28, monthlyPayment: (grossAnnual / 12) * 0.28 },
+    ramsey: { balance: ramsey, monthlyPayment: (netAnnual / 12) * 0.25 },
+  };
+}
+
+/**
+ * Carrying the mortgage and investing vs. paying it off.
+ * Paying off "earns" the mortgage rate, guaranteed. Investing is expected to
+ * earn ~7%/yr, not guaranteed. Returns the annual dollar edge of the winner.
+ */
+export function payoffVsInvest({
+  loanOutstanding,
+  mortgageRatePct,
+  expectedReturnPct = EXPECTED_MARKET_RETURN_PCT,
+}) {
+  const investWins = expectedReturnPct > mortgageRatePct;
+  const edgePct = Math.abs(expectedReturnPct - mortgageRatePct);
+  return {
+    investWins,
+    edgePct,
+    annualDollarEdge: (loanOutstanding * edgePct) / 100,
+    expectedReturnPct,
+  };
+}
+
+/**
  * Run the payoff plan.
  *
  * Order of operations:
