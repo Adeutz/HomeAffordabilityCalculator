@@ -36,17 +36,30 @@ export default function AssetAllocationCard({
   }));
   const [emergencyMonths, setEmergencyMonths] = useState(3);
   const [sinkingFunds, setSinkingFunds] = useState(0);
+  const [loanOutstanding, setLoanOutstanding] = useState(loanAmount);
 
   useEffect(() => {
     return registerCalculatorExtras('assetAllocation', {
-      getExtras: () => ({ balances, emergencyMonths, sinkingFunds }),
+      getExtras: () => ({
+        balances,
+        emergencyMonths,
+        sinkingFunds,
+        loanOutstanding,
+      }),
       applyExtras: (data) => {
         if (data.balances) setBalances(data.balances);
         if (data.emergencyMonths != null) setEmergencyMonths(data.emergencyMonths);
         if (data.sinkingFunds != null) setSinkingFunds(data.sinkingFunds);
+        if (data.loanOutstanding != null) setLoanOutstanding(data.loanOutstanding);
       },
     });
-  }, [balances, emergencyMonths, sinkingFunds, registerCalculatorExtras]);
+  }, [
+    balances,
+    emergencyMonths,
+    sinkingFunds,
+    loanOutstanding,
+    registerCalculatorExtras,
+  ]);
 
   const monthlyBurn = useMemo(
     () => monthlyExpenseBurn({ annualIncome, monthlyHousing, monthlyDebts }),
@@ -61,10 +74,10 @@ export default function AssetAllocationCard({
       computePayoffPlan({
         balances,
         cashNeededAtClosing,
-        loanAmount,
+        loanAmount: loanOutstanding,
         reserveTarget,
       }),
-    [balances, cashNeededAtClosing, loanAmount, reserveTarget],
+    [balances, cashNeededAtClosing, loanOutstanding, reserveTarget],
   );
 
   const canPayOff = plan.shortfall <= 0 && plan.reserveShortfall <= 0;
@@ -77,8 +90,8 @@ export default function AssetAllocationCard({
     <Card title="Could you pay off this house?">
       <p className="text-small muted mb-16">
         Enter what you actually have in each account. We check whether you could
-        cover the down payment + closing, wipe out the whole mortgage, and still
-        keep your emergency fund and sinking funds untouched. This is a what-if —
+        cover the down payment + closing, wipe out the mortgage balance you set
+        below, and still keep your emergency fund and sinking funds untouched. This is a what-if —
         it does not change your main inputs above.
       </p>
 
@@ -110,6 +123,42 @@ export default function AssetAllocationCard({
         reserves. Other-house equity can help pay off the loan (by selling or
         borrowing against it) but does not count toward reserves.
       </div>
+
+      <div className="divider" />
+
+      {/* ---- Loan balance ---- */}
+      <div className="text-small muted mb-8">
+        <strong>Mortgage to pay off</strong>
+      </div>
+
+      <div className="allocation-money-row">
+        <span className="allocation-money-label">
+          Loan balance outstanding
+          <span className="text-tiny muted" style={{ display: 'block', fontWeight: 400 }}>
+            Already paying this loan? Lower it to what you still owe today.
+          </span>
+        </span>
+        <EditableMoney
+          value={loanOutstanding}
+          onChange={(v) => setLoanOutstanding(Math.max(0, v))}
+          onEditStart={recordUndoPoint}
+          ariaLabel="Loan balance outstanding"
+        />
+      </div>
+
+      <Slider
+        label="Quick adjust loan balance"
+        value={loanOutstanding}
+        onChange={setLoanOutstanding}
+        min={0}
+        max={Math.max(loanAmount, loanOutstanding, 1)}
+        step={1_000}
+        hint={
+          loanOutstanding !== loanAmount
+            ? `Calculator shows ${money(loanAmount)} at purchase — you're using ${money(loanOutstanding)}.`
+            : `Full loan at purchase from your inputs: ${money(loanAmount)}.`
+        }
+      />
 
       <div className="divider" />
 
@@ -177,7 +226,7 @@ export default function AssetAllocationCard({
 
         <div className="funding-summary">
           <CostRow label={`Down payment (${money(downPayment)}) + closing (${money(closingCosts)})`} amount={cashNeededAtClosing} />
-          <CostRow label="Pay off remaining mortgage" amount={loanAmount} />
+          <CostRow label="Pay off remaining mortgage" amount={loanOutstanding} />
           <CostRow label={`Reserves kept aside (${emergencyMonths} mo + sinking)`} amount={reserveTarget} />
           <div className="funding-summary-row" style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
             <span><strong>Total needed</strong></span>
@@ -213,7 +262,7 @@ export default function AssetAllocationCard({
         plan={plan}
         reserveTarget={reserveTarget}
         emergencyMonths={emergencyMonths}
-        loanAmount={loanAmount}
+        loanAmount={loanOutstanding}
       />
     </Card>
   );
@@ -264,7 +313,7 @@ function PayoffWarnings({ plan, reserveTarget, emergencyMonths, loanAmount }) {
   if (plan.shortfall > 0) {
     warnings.push({
       level: 'red',
-      text: `After protecting reserves, you're ${money(plan.shortfall)} short of covering closing + the full ${money(loanAmount)} payoff.`,
+      text: `After protecting reserves, you're ${money(plan.shortfall)} short of covering closing + the ${money(loanAmount)} payoff.`,
     });
   }
   if (plan.shortfall <= 0 && plan.reserveShortfall <= 0 && plan.spent.otherHouseEquity > 0) {
