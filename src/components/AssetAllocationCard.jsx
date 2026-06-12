@@ -12,7 +12,49 @@ import {
 } from '../lib/payoffPlan.js';
 import { estimateNet } from '../lib/taxes.js';
 import { money, percent } from '../lib/format.js';
+import { load, save, KEYS } from '../lib/storage.js';
 import { useInputs } from '../state/InputsContext.jsx';
+
+function defaultPayoffPlanState({
+  currentSavings,
+  loanAmount,
+  annualIncome,
+}) {
+  return {
+    balances: {
+      cash: currentSavings,
+      brokerage: 0,
+      otherInvestments: 0,
+      otherHouseEquity: 0,
+      retirement401k: 0,
+    },
+    emergencyMonths: 3,
+    sinkingFunds: 0,
+    loanOutstanding: loanAmount,
+    sandboxIncome: annualIncome,
+  };
+}
+
+function loadPayoffPlanState(props) {
+  const defaults = defaultPayoffPlanState(props);
+  const saved = load(KEYS.payoffPlanCard, null);
+  if (!saved || typeof saved !== 'object') return defaults;
+  return {
+    ...defaults,
+    emergencyMonths:
+      saved.emergencyMonths != null ? Number(saved.emergencyMonths) : defaults.emergencyMonths,
+    sinkingFunds:
+      saved.sinkingFunds != null ? Number(saved.sinkingFunds) : defaults.sinkingFunds,
+    loanOutstanding:
+      saved.loanOutstanding != null ? Number(saved.loanOutstanding) : defaults.loanOutstanding,
+    sandboxIncome:
+      saved.sandboxIncome != null ? Number(saved.sandboxIncome) : defaults.sandboxIncome,
+    balances: {
+      ...defaults.balances,
+      ...(saved.balances && typeof saved.balances === 'object' ? saved.balances : {}),
+    },
+  };
+}
 
 /**
  * "Could I pay off this house?" sandbox.
@@ -36,17 +78,27 @@ export default function AssetAllocationCard({
 }) {
   const { registerCalculatorExtras, recordUndoPoint } = useInputs();
 
-  const [balances, setBalances] = useState(() => ({
-    cash: currentSavings,
-    brokerage: 0,
-    otherInvestments: 0,
-    otherHouseEquity: 0,
-    retirement401k: 0,
+  const [initial] = useState(() => loadPayoffPlanState({
+    currentSavings,
+    loanAmount,
+    annualIncome,
   }));
-  const [emergencyMonths, setEmergencyMonths] = useState(3);
-  const [sinkingFunds, setSinkingFunds] = useState(0);
-  const [loanOutstanding, setLoanOutstanding] = useState(loanAmount);
-  const [sandboxIncome, setSandboxIncome] = useState(annualIncome);
+
+  const [balances, setBalances] = useState(initial.balances);
+  const [emergencyMonths, setEmergencyMonths] = useState(initial.emergencyMonths);
+  const [sinkingFunds, setSinkingFunds] = useState(initial.sinkingFunds);
+  const [loanOutstanding, setLoanOutstanding] = useState(initial.loanOutstanding);
+  const [sandboxIncome, setSandboxIncome] = useState(initial.sandboxIncome);
+
+  useEffect(() => {
+    save(KEYS.payoffPlanCard, {
+      balances,
+      emergencyMonths,
+      sinkingFunds,
+      loanOutstanding,
+      sandboxIncome,
+    });
+  }, [balances, emergencyMonths, sinkingFunds, loanOutstanding, sandboxIncome]);
 
   useEffect(() => {
     return registerCalculatorExtras('assetAllocation', {

@@ -38,4 +38,6 @@ export const KEYS = {
   stickyPlannedPrice: 'stickyPlannedPrice',
   /** Remembers the mortgage payoff calculator's extra payments, dates, and recast settings */
   payoffSettings: 'payoffSettings',
+  /** "Could you pay off this house?" card — account balances, reserves, loan, income */
+  payoffPlanCard: 'payoffPlanCard',
 };
