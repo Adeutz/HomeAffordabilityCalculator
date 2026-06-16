@@ -40,4 +40,6 @@ export const KEYS = {
   payoffSettings: 'payoffSettings',
   /** "Could you pay off this house?" card — account balances, reserves, loan, income */
   payoffPlanCard: 'payoffPlanCard',
+  /** "Pay off vs keep & invest" page — pool, loan, ages, and assumptions */
+  payoffVsInvest: 'payoffVsInvest',
 };

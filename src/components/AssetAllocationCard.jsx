@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import Card from './Card.jsx';
 import Slider from './Slider.jsx';
 import EditableMoney from './EditableMoney.jsx';
@@ -309,6 +310,10 @@ export default function AssetAllocationCard({
           ? `Net worth growth: your ${percent(interestRate, 2)} mortgage is below the ~${EXPECTED_MARKET_RETURN_PCT}% long-run market average. Mathematically, investing the leftover beats rushing the payoff by about ${money(investCompare.annualDollarEdge)}/yr on this balance — but the market return isn't guaranteed and the payoff is.`
           : `Net worth growth: your ${percent(interestRate, 2)} mortgage costs more than the ~${EXPECTED_MARKET_RETURN_PCT}% long-run market average. Paying it off is the better deal — a guaranteed ${percent(interestRate, 2)} return, worth about ${money(investCompare.annualDollarEdge)}/yr versus investing.`}
       </div>
+
+      <Link to="/payoff-vs-invest" className="text-small" style={{ display: 'inline-block', marginTop: 10, fontWeight: 600 }}>
+        See the full payoff-vs-invest analysis to retirement →
+      </Link>
 
       <div className="divider" />
 
