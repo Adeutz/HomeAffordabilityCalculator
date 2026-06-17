@@ -149,3 +149,89 @@ export function computePayoffPlan({
     leftoverFree,
   };
 }
+
+/** Round to nearest $10k for sensible default scenario targets. */
+function roundScenarioTarget(n) {
+  return Math.round(Math.max(0, n) / 10_000) * 10_000;
+}
+
+/**
+ * Default pay-down targets from a current balance: ~75%, ~50%, and paid off.
+ * e.g. $1M current → [$750k, $500k, $0]
+ */
+export function defaultScenarioTargets(currentBalance) {
+  const current = Math.max(0, currentBalance);
+  if (current <= 0) return [0];
+
+  const raw = [
+    roundScenarioTarget(current * 0.75),
+    roundScenarioTarget(current * 0.5),
+    0,
+  ];
+  const unique = [...new Set(raw)].filter((t) => t <= current);
+  if (!unique.includes(0)) unique.push(0);
+  return unique.sort((a, b) => b - a);
+}
+
+/**
+ * One row: pay the mortgage down from `currentBalance` to `targetBalance`.
+ * Uses `cashNeededAtClosing: 0` — this is extra paydown only, not a new purchase.
+ */
+export function computePaydownScenario({
+  balances,
+  reserveTarget,
+  currentBalance,
+  targetBalance,
+}) {
+  const current = Math.max(0, currentBalance);
+  const target = Math.max(0, targetBalance);
+
+  if (target >= current) {
+    return {
+      targetBalance: target,
+      extraPayment: 0,
+      alreadyAtOrBelow: true,
+      plan: null,
+      brokerageLeft: Math.max(0, balances.brokerage ?? 0),
+      cashLeft: Math.max(0, balances.cash ?? 0),
+      brokerageUsed: 0,
+      works: true,
+    };
+  }
+
+  const extraPayment = current - target;
+  const plan = computePayoffPlan({
+    balances,
+    cashNeededAtClosing: 0,
+    loanAmount: extraPayment,
+    reserveTarget,
+  });
+
+  return {
+    targetBalance: target,
+    extraPayment,
+    alreadyAtOrBelow: false,
+    plan,
+    brokerageLeft: plan.remaining.brokerage ?? 0,
+    cashLeft: plan.remaining.cash ?? 0,
+    brokerageUsed: plan.spent.brokerage ?? 0,
+    works: plan.shortfall <= 0 && plan.reserveShortfall <= 0,
+  };
+}
+
+/** Compare several target balances side by side (preserves input order). */
+export function computePaydownScenarios({
+  balances,
+  reserveTarget,
+  currentBalance,
+  targets,
+}) {
+  return (targets ?? []).map((target) =>
+    computePaydownScenario({
+      balances,
+      reserveTarget,
+      currentBalance,
+      targetBalance: Math.max(0, Number(target) || 0),
+    }),
+  );
+}

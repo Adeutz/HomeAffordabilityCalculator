@@ -5,6 +5,8 @@ import Slider from './Slider.jsx';
 import EditableMoney from './EditableMoney.jsx';
 import {
   computePayoffPlan,
+  computePaydownScenarios,
+  defaultScenarioTargets,
   EXPECTED_MARKET_RETURN_PCT,
   idealMortgageBalances,
   monthlyExpenseBurn,
@@ -33,6 +35,7 @@ function defaultPayoffPlanState({
     sinkingFunds: 0,
     loanOutstanding: loanAmount,
     sandboxIncome: annualIncome,
+    scenarioTargets: defaultScenarioTargets(loanAmount),
   };
 }
 
@@ -50,6 +53,9 @@ function loadPayoffPlanState(props) {
       saved.loanOutstanding != null ? Number(saved.loanOutstanding) : defaults.loanOutstanding,
     sandboxIncome:
       saved.sandboxIncome != null ? Number(saved.sandboxIncome) : defaults.sandboxIncome,
+    scenarioTargets: Array.isArray(saved.scenarioTargets) && saved.scenarioTargets.length > 0
+      ? saved.scenarioTargets.map((t) => Math.max(0, Number(t) || 0))
+      : defaults.scenarioTargets,
     balances: {
       ...defaults.balances,
       ...(saved.balances && typeof saved.balances === 'object' ? saved.balances : {}),
@@ -90,6 +96,7 @@ export default function AssetAllocationCard({
   const [sinkingFunds, setSinkingFunds] = useState(initial.sinkingFunds);
   const [loanOutstanding, setLoanOutstanding] = useState(initial.loanOutstanding);
   const [sandboxIncome, setSandboxIncome] = useState(initial.sandboxIncome);
+  const [scenarioTargets, setScenarioTargets] = useState(initial.scenarioTargets);
 
   useEffect(() => {
     save(KEYS.payoffPlanCard, {
@@ -98,8 +105,9 @@ export default function AssetAllocationCard({
       sinkingFunds,
       loanOutstanding,
       sandboxIncome,
+      scenarioTargets,
     });
-  }, [balances, emergencyMonths, sinkingFunds, loanOutstanding, sandboxIncome]);
+  }, [balances, emergencyMonths, sinkingFunds, loanOutstanding, sandboxIncome, scenarioTargets]);
 
   useEffect(() => {
     return registerCalculatorExtras('assetAllocation', {
@@ -109,6 +117,7 @@ export default function AssetAllocationCard({
         sinkingFunds,
         loanOutstanding,
         sandboxIncome,
+        scenarioTargets,
       }),
       applyExtras: (data) => {
         if (data.balances) setBalances(data.balances);
@@ -116,6 +125,7 @@ export default function AssetAllocationCard({
         if (data.sinkingFunds != null) setSinkingFunds(data.sinkingFunds);
         if (data.loanOutstanding != null) setLoanOutstanding(data.loanOutstanding);
         if (data.sandboxIncome != null) setSandboxIncome(data.sandboxIncome);
+        if (Array.isArray(data.scenarioTargets)) setScenarioTargets(data.scenarioTargets);
       },
     });
   }, [
@@ -124,6 +134,7 @@ export default function AssetAllocationCard({
     sinkingFunds,
     loanOutstanding,
     sandboxIncome,
+    scenarioTargets,
     registerCalculatorExtras,
   ]);
 
@@ -179,6 +190,17 @@ export default function AssetAllocationCard({
         mortgageRatePct: interestRate,
       }),
     [loanOutstanding, interestRate],
+  );
+
+  const paydownScenarios = useMemo(
+    () =>
+      computePaydownScenarios({
+        balances,
+        reserveTarget,
+        currentBalance: loanOutstanding,
+        targets: scenarioTargets,
+      }),
+    [balances, reserveTarget, loanOutstanding, scenarioTargets],
   );
 
   const setBalance = (key, value) => {
@@ -354,6 +376,15 @@ export default function AssetAllocationCard({
         <strong>{money(reserveTarget)}</strong>
       </div>
 
+      <PaydownScenariosSection
+        currentBalance={loanOutstanding}
+        scenarios={paydownScenarios}
+        scenarioTargets={scenarioTargets}
+        onTargetsChange={setScenarioTargets}
+        onResetTargets={() => setScenarioTargets(defaultScenarioTargets(loanOutstanding))}
+        recordUndoPoint={recordUndoPoint}
+      />
+
       <div className="divider" />
 
       {/* ---- The verdict ---- */}
@@ -420,6 +451,133 @@ export default function AssetAllocationCard({
         loanAmount={loanOutstanding}
       />
     </Card>
+  );
+}
+
+function PaydownScenariosSection({
+  currentBalance,
+  scenarios,
+  scenarioTargets,
+  onTargetsChange,
+  onResetTargets,
+  recordUndoPoint,
+}) {
+  const updateTarget = (index, value) => {
+    onTargetsChange(
+      scenarioTargets.map((t, i) => (i === index ? Math.max(0, value) : t)),
+    );
+  };
+
+  const addTarget = () => {
+    if (scenarioTargets.length >= 5) return;
+    const last = scenarioTargets[scenarioTargets.length - 1] ?? 0;
+    onTargetsChange([...scenarioTargets, Math.max(0, last - 100_000)]);
+  };
+
+  const removeTarget = (index) => {
+    if (scenarioTargets.length <= 1) return;
+    onTargetsChange(scenarioTargets.filter((_, i) => i !== index));
+  };
+
+  return (
+    <div className="paydown-scenarios mt-16">
+      <div className="flex-between stack-sm-start mb-8">
+        <div>
+          <div className="text-small muted">
+            <strong>Pay down scenarios</strong>
+          </div>
+          <div className="text-tiny muted" style={{ marginTop: 4 }}>
+            Compare what&apos;s left in brokerage if you pay your{' '}
+            <strong>{money(currentBalance)}</strong> mortgage down to each target.
+            Reserves stay protected. Extra paydown only — no closing costs here.
+          </div>
+        </div>
+        <button
+          type="button"
+          className="text-tiny"
+          style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontWeight: 600, flexShrink: 0 }}
+          onClick={onResetTargets}
+        >
+          Reset targets
+        </button>
+      </div>
+
+      <div className="paydown-scenarios-scroll">
+        <table className="paydown-scenarios-table">
+          <thead>
+            <tr>
+              <th>Pay down to</th>
+              <th>Extra payment</th>
+              <th className="paydown-brokerage-col">Brokerage left</th>
+              <th>Cash left</th>
+              <th aria-label="Status" />
+            </tr>
+          </thead>
+          <tbody>
+            {scenarioTargets.map((target, index) => {
+              const row = scenarios[index];
+              return (
+                <tr key={index}>
+                  <td>
+                    <EditableMoney
+                      value={target}
+                      onChange={(v) => updateTarget(index, v)}
+                      onEditStart={recordUndoPoint}
+                      ariaLabel={`Scenario ${index + 1} target balance`}
+                    />
+                  </td>
+                  <td>
+                    {row?.alreadyAtOrBelow
+                      ? <span className="text-tiny muted">—</span>
+                      : money(row?.extraPayment ?? 0)}
+                  </td>
+                  <td className="paydown-brokerage-col">
+                    <strong>{money(row?.brokerageLeft ?? 0)}</strong>
+                    {row?.brokerageUsed > 0 && (
+                      <div className="text-tiny muted">
+                        −{money(row.brokerageUsed)} used
+                      </div>
+                    )}
+                  </td>
+                  <td>{money(row?.cashLeft ?? 0)}</td>
+                  <td>
+                    {row?.alreadyAtOrBelow ? (
+                      <span className="pill yellow"><span className="dot" />At/below</span>
+                    ) : (
+                      <span className={`pill ${row?.works ? 'green' : 'red'}`}>
+                        <span className="dot" />
+                        {row?.works ? 'OK' : 'Short'}
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="paydown-scenarios-actions">
+        {scenarioTargets.length < 5 && (
+          <button
+            type="button"
+            className="paydown-scenarios-btn"
+            onClick={addTarget}
+          >
+            + Add target
+          </button>
+        )}
+        {scenarioTargets.length > 1 && (
+          <button
+            type="button"
+            className="paydown-scenarios-btn"
+            onClick={() => removeTarget(scenarioTargets.length - 1)}
+          >
+            Remove last
+          </button>
+        )}
+      </div>
+    </div>
   );
 }
 
