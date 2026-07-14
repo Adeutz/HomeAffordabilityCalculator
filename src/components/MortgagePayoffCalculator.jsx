@@ -12,6 +12,7 @@ import {
 } from 'recharts';
 import Card from './Card.jsx';
 import NumberField from './NumberField.jsx';
+import { useNumericDraft } from '../hooks/useNumericDraft.js';
 import {
   mortgagePayoffAnalysis,
   recastPayment,
@@ -643,6 +644,20 @@ function MonthYearPicker({
   onYearChange,
   hint,
 }) {
+  const yearInput = useNumericDraft({
+    value: year,
+    onChange: (v) => {
+      const n = Number(v);
+      // Only accept plausible years; half-typed ones ("2", "20") wait in the
+      // draft, and blur clamps whatever's there into range.
+      if (Number.isFinite(n) && n >= 1990 && n <= 2100) onYearChange(n);
+    },
+    min: 1990,
+    max: 2100,
+    step: 1,
+    commas: false,
+  });
+
   return (
     <div className="field">
       <label>{label}</label>
@@ -660,21 +675,8 @@ function MonthYearPicker({
         </select>
         <input
           className="input"
-          type="number"
-          inputMode="numeric"
-          enterKeyHint="done"
-          value={year}
-          min={1990}
-          max={2100}
-          step={1}
           style={{ maxWidth: 110 }}
-          onChange={(e) => onYearChange(Number(e.target.value) || year)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault();
-              e.currentTarget.blur();
-            }
-          }}
+          {...yearInput.inputProps}
         />
       </div>
       {hint && <div className="hint">{hint}</div>}

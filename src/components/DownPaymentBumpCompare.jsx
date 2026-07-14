@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { monthlyPaymentBreakdown } from '../lib/mortgage.js';
 import { money } from '../lib/format.js';
+import { useNumericDraft } from '../hooks/useNumericDraft.js';
 
 const BUMPS = [50_000, 100_000, 200_000, 300_000];
 
@@ -78,6 +79,18 @@ export default function DownPaymentBumpCompare({
 
   const maxExtraDown = Math.max(0, homePrice - inputs.downPayment);
 
+  const customDownInput = useNumericDraft({
+    value: customExtraDown || '',
+    onChange: (v) =>
+      setCustomExtraDown(
+        v === '' ? 0 : Math.max(0, Math.min(Number(v) || 0, maxExtraDown)),
+      ),
+    min: 0,
+    max: maxExtraDown,
+    step: 1_000,
+    allowEmpty: true,
+  });
+
   const presetRows = useMemo(() => {
     if (homePrice <= 0) return [];
     return BUMPS.map((bump) =>
@@ -148,19 +161,8 @@ export default function DownPaymentBumpCompare({
         <input
           id="custom-down-bump"
           className="input"
-          type="number"
-          inputMode="numeric"
-          min={0}
-          max={maxExtraDown}
-          step={1_000}
-          value={customExtraDown || ''}
-          placeholder="e.g. 75000"
-          onChange={(e) => {
-            const n = Number(e.target.value);
-            setCustomExtraDown(
-              Number.isFinite(n) ? Math.max(0, Math.min(n, maxExtraDown)) : 0,
-            );
-          }}
+          placeholder="e.g. 75,000"
+          {...customDownInput.inputProps}
         />
         <div className="hint">
           {maxExtraDown > 0

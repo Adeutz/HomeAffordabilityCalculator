@@ -9,6 +9,7 @@ import SavingsGoalPage from './pages/SavingsGoalPage.jsx';
 import RentVsBuyPage from './pages/RentVsBuyPage.jsx';
 import RefinancePage from './pages/RefinancePage.jsx';
 import PayoffVsInvestPage from './pages/PayoffVsInvestPage.jsx';
+import FutureScenariosPage from './pages/FutureScenariosPage.jsx';
 import { InputsProvider } from './state/InputsContext.jsx';
 import { useTheme } from './hooks/useTheme.js';
 import InstallPrompt from './components/InstallPrompt.jsx';
@@ -26,6 +27,7 @@ const NAV_ITEMS = [
   { to: '/scenarios', label: 'Scenarios' },
   { to: '/savings-goal', label: 'Savings goal' },
   { to: '/payoff-vs-invest', label: 'Payoff vs invest' },
+  { to: '/future-scenarios', label: 'Future scenarios' },
   { to: '/refinance', label: 'Refinance' },
   { to: '/rent-vs-buy', label: 'Rent vs buy' },
 ];
@@ -147,6 +149,7 @@ export default function App() {
               <Route path="/scenarios" element={<ScenariosPage />} />
               <Route path="/savings-goal" element={<SavingsGoalPage />} />
               <Route path="/payoff-vs-invest" element={<PayoffVsInvestPage />} />
+              <Route path="/future-scenarios" element={<FutureScenariosPage />} />
               <Route path="/refinance" element={<RefinancePage />} />
               <Route path="/rent-vs-buy" element={<RentVsBuyPage />} />
             </Routes>

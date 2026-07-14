@@ -8,6 +8,7 @@ import {
   totalInterest,
 } from '../lib/mortgage.js';
 import { money, moneyExact, yearsHumanized } from '../lib/format.js';
+import { useNumericDraft } from '../hooks/useNumericDraft.js';
 import {
   LineChart,
   Line,
@@ -27,6 +28,13 @@ const VIEW_OPTIONS = [
 export default function AmortizationPage() {
   const { inputs, update } = useInputs();
   const [view, setView] = useState('yearly');
+
+  const extraPrincipalInput = useNumericDraft({
+    value: inputs.extraMonthlyPrincipal,
+    onChange: (v) => update({ extraMonthlyPrincipal: Number(v) || 0 }),
+    min: 0,
+    step: 25,
+  });
 
   const { schedule, scheduleNoExtra, homePrice, loanAmount } = useMemo(() => {
     const max = maxMonthlyHousingFromIncome({
@@ -115,22 +123,8 @@ export default function AmortizationPage() {
           <label className="text-small">Extra per month:</label>
           <input
             className="input"
-            type="number"
-            inputMode="decimal"
-            enterKeyHint="done"
-            min={0}
-            step={25}
-            value={inputs.extraMonthlyPrincipal}
-            onChange={(e) =>
-              update({ extraMonthlyPrincipal: Number(e.target.value) || 0 })
-            }
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                e.currentTarget.blur();
-              }
-            }}
             style={{ width: 120 }}
+            {...extraPrincipalInput.inputProps}
           />
           {inputs.extraMonthlyPrincipal > 0 ? (
             <div className="text-small">

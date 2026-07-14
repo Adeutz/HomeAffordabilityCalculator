@@ -894,7 +894,8 @@ input[type='range']::-moz-range-thumb {
   font-size: 14px;
 }
 .breakdown-row:last-child { border-bottom: 0; }
-.breakdown-row .swatch {
+/* Color swatch — used in breakdown rows, hero labels, and scenario tables */
+.swatch {
   display: inline-block;
   width: 10px;
   height: 10px;

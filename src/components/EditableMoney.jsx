@@ -1,5 +1,6 @@
-import { useRef, useState } from 'react';
-import { money, parseMoneyInput } from '../lib/format.js';
+import { useLayoutEffect, useRef, useState } from 'react';
+import { money, parseMoneyInput, groupNumericString } from '../lib/format.js';
+import { regroupForCaret } from '../hooks/useNumericDraft.js';
 
 /**
  * Tap-to-type money field. Supports plain numbers, commas, and 120k / 1.5m shorthands.
@@ -14,9 +15,17 @@ export default function EditableMoney({
   className = '',
 }) {
   const inputRef = useRef(null);
+  const caretRef = useRef(null);
   const undoStartedRef = useRef(false);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
+
+  // Put the caret back where it belongs after commas shift around it.
+  useLayoutEffect(() => {
+    if (caretRef.current == null) return;
+    inputRef.current?.setSelectionRange(caretRef.current, caretRef.current);
+    caretRef.current = null;
+  });
 
   const beginUndo = () => {
     if (undoStartedRef.current) return;
@@ -26,7 +35,7 @@ export default function EditableMoney({
 
   const startEditing = () => {
     beginUndo();
-    setDraft(String(Math.round(value ?? 0)));
+    setDraft(groupNumericString(String(Math.round(value ?? 0))));
     setEditing(true);
     requestAnimationFrame(() => {
       inputRef.current?.focus();
@@ -72,7 +81,14 @@ export default function EditableMoney({
           inputMode="decimal"
           enterKeyHint="done"
           value={draft}
-          onChange={(e) => setDraft(e.target.value)}
+          onChange={(e) => {
+            const { formatted, caret } = regroupForCaret(
+              e.target.value,
+              e.target.selectionStart,
+            );
+            caretRef.current = caret;
+            setDraft(formatted);
+          }}
           onBlur={commit}
           onKeyDown={onKeyDown}
           aria-label={ariaLabel ?? 'Enter dollar amount'}

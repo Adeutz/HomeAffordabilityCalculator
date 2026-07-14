@@ -42,4 +42,6 @@ export const KEYS = {
   payoffPlanCard: 'payoffPlanCard',
   /** "Pay off vs keep & invest" page — pool, loan, ages, and assumptions */
   payoffVsInvest: 'payoffVsInvest',
+  /** "Future scenarios" page — household cash flow, life events, market moods */
+  futureScenarios: 'futureScenarios',
 };

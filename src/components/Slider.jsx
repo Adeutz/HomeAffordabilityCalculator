@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { money, percent } from '../lib/format.js';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { money, percent, groupNumericString } from '../lib/format.js';
+import { regroupForCaret } from '../hooks/useNumericDraft.js';
 import { useInputs } from '../state/InputsContext.jsx';
 
 // A Zillow-style slider with an editable value.
@@ -31,8 +32,16 @@ export default function Slider({
   const { beginGesture, endGesture } = useInputs();
   const trackRef = useRef(null);
   const inputRef = useRef(null);
+  const caretRef = useRef(null);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
+
+  // Keep the caret in place when live comma-grouping reshapes the draft.
+  useLayoutEffect(() => {
+    if (caretRef.current == null) return;
+    inputRef.current?.setSelectionRange(caretRef.current, caretRef.current);
+    caretRef.current = null;
+  });
 
   // The slider's "stretched" maximum. Starts equal to the prop's max and
   // grows whenever the user drags to the right edge.
@@ -149,7 +158,14 @@ export default function Slider({
               inputMode="decimal"
               enterKeyHint="done"
               value={draft}
-              onChange={(e) => setDraft(e.target.value)}
+              onChange={(e) => {
+                const { formatted, caret } = regroupForCaret(
+                  e.target.value,
+                  e.target.selectionStart,
+                );
+                caretRef.current = caret;
+                setDraft(formatted);
+              }}
               onBlur={commit}
               onKeyDown={onKeyDown}
               size={inputSize}
@@ -189,11 +205,11 @@ export default function Slider({
 }
 
 // Convert the current value into a string that's good for editing.
-// e.g. 120000 -> "120000", 6.75 -> "6.75"
+// e.g. 120000 -> "120,000", 6.75 -> "6.75"
 function rawForEditing(value, format) {
   if (format === 'percent') return String(value);
-  if (format === 'money') return String(Math.round(value));
-  return String(value);
+  if (format === 'money') return groupNumericString(String(Math.round(value)));
+  return groupNumericString(String(value));
 }
 
 // Parse "$120,000", "120k", "6.75%", " 120000 " etc.
