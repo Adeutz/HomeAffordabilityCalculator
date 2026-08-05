@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import Card from '../components/Card.jsx';
 import NumberField from '../components/NumberField.jsx';
-import NetWorthCompareChart from '../components/NetWorthCompareChart.jsx';
+import FanChart from '../components/FanChart.jsx';
 import { useInputs } from '../state/InputsContext.jsx';
 import { load, save, KEYS } from '../lib/storage.js';
 import { money, percent } from '../lib/format.js';
@@ -10,11 +10,14 @@ import {
   buildComparison,
   buildAccelerated,
   buildSensitivity,
-  buildVerdict,
-  crossoverYear,
   afterTaxNetWorth,
-  toTodaysDollars,
 } from '../lib/payoffProjection.js';
+import {
+  runMonteCarlo,
+  buildMonteCarloVerdict,
+  returnStats,
+  RETURN_MODES,
+} from '../lib/monteCarlo.js';
 
 const COLORS = {
   payoff: '#00a663', // green — guaranteed / safe
@@ -61,6 +64,20 @@ function buildDefaults(inputs) {
     homeAppreciationPct: Number(inputs.annualHomeAppreciationPct) || 3,
     capGainsPct: 15,
     showReal: true,
+    // --- Monte Carlo settings ---
+    // 'bootstrap' replays real historical years; 'normal' draws from a bell
+    // curve. Bootstrap is the default because real markets have fatter tails
+    // than a bell curve admits.
+    returnMode: RETURN_MODES.BOOTSTRAP,
+    simRuns: 5000,
+    // Copy 5 consecutive historical years at a time so crashes keep their
+    // recoveries attached instead of being shuffled apart.
+    blockYears: 5,
+    stdDevPct: 15,
+    // Slide history's average onto the user's own expected return (see
+    // recenterReturns in monteCarlo.js). Turning this off bootstraps raw
+    // history, which averages ~10%/yr and roughly doubles every number.
+    recenterToExpected: true,
   };
 }
 
@@ -99,6 +116,11 @@ export default function PayoffVsInvestPage() {
     homeAppreciationPct,
     capGainsPct,
     showReal,
+    returnMode,
+    simRuns,
+    blockYears,
+    stdDevPct,
+    recenterToExpected,
   } = settings;
 
   const horizonYears = Math.max(1, Math.round(retirementAge - currentAge));
@@ -136,8 +158,11 @@ export default function PayoffVsInvestPage() {
     ],
   );
 
+  // The deterministic engine still powers three things that don't need (or
+  // can't use) randomness: the "do nothing" cash floor, the extra-payment
+  // comparison, and the fixed-return sensitivity table.
   const comparison = useMemo(() => buildComparison(baseArgs), [baseArgs]);
-  const { payoff, keep, baseline } = comparison;
+  const { baseline } = comparison;
 
   const accelerated = useMemo(
     () => buildAccelerated({ ...baseArgs, extraMortgagePrincipal }),
@@ -154,13 +179,98 @@ export default function PayoffVsInvestPage() {
     showReal ? Math.pow(1 + inflationPct / 100, y) : 1;
   const adj = (v, y) => v / realFactor(y);
 
-  // Headline numbers: net worth at retirement, AFTER cashing out (cap gains
-  // paid), in today's dollars (if toggled on).
-  const finalPayoff = adj(
-    afterTaxNetWorth(payoff.final, capGainsPct),
-    horizonYears,
+  // ---------------- Monte Carlo ----------------
+  //
+  // Both strategies commit the same monthly budget; the only difference is
+  // where the money sits. Each simulated future hands BOTH strategies the same
+  // market history, so every comparison asks "given this future, which choice
+  // would have been better?" rather than comparing a lucky version of one plan
+  // against an unlucky version of the other.
+  const strategies = useMemo(
+    () => [
+      {
+        key: 'payoff',
+        label: 'Pay off the house',
+        startInvest: Math.max(0, pool - loanBalance),
+        startMortgage: Math.max(0, loanBalance - pool),
+        monthlyContribution: monthlyExtraInvest,
+        investFreedPayment: true,
+      },
+      {
+        key: 'keep',
+        label: 'Keep mortgage & invest',
+        startInvest: pool,
+        startMortgage: loanBalance,
+        monthlyContribution: monthlyExtraInvest,
+        investFreedPayment: true,
+      },
+    ],
+    [pool, loanBalance, monthlyExtraInvest],
   );
-  const finalKeep = adj(afterTaxNetWorth(keep.final, capGainsPct), horizonYears);
+
+  const mc = useMemo(
+    () =>
+      runMonteCarlo({
+        strategies,
+        shared: {
+          monthlyPI: pi,
+          mortgageRatePct,
+          months,
+          homePrice,
+          homeAppreciationPct,
+          start401k,
+        },
+        runs: simRuns,
+        seed: 12345, // fixed, so the numbers don't flicker on every re-render
+        mode: returnMode,
+        meanReturnPct: marketReturnPct,
+        stdDevPct,
+        blockYears,
+        recenterToPct: recenterToExpected ? marketReturnPct : null,
+        capGainsPct,
+        inflationPct,
+        real: showReal,
+      }),
+    [
+      strategies,
+      pi,
+      mortgageRatePct,
+      months,
+      homePrice,
+      homeAppreciationPct,
+      start401k,
+      simRuns,
+      returnMode,
+      marketReturnPct,
+      stdDevPct,
+      blockYears,
+      recenterToExpected,
+      capGainsPct,
+      inflationPct,
+      showReal,
+    ],
+  );
+
+  const payoffMc = mc.byStrategy.payoff;
+  const keepMc = mc.byStrategy.keep;
+
+  // headToHead measures (payoff - keep). Flip it so everything below reads
+  // from "keep & invest"'s point of view, which is how the page is written.
+  // Note the percentiles also mirror: keep's bad case is payoff's good case.
+  const h2h = mc.headToHead['payoff-vs-keep'];
+  const keepEdge = useMemo(
+    () => ({
+      p10: -h2h.gap.p90,
+      p25: -h2h.gap.p75,
+      p50: -h2h.gap.p50,
+      p75: -h2h.gap.p25,
+      p90: -h2h.gap.p10,
+    }),
+    [h2h],
+  );
+
+  const finalPayoff = payoffMc.final.p50;
+  const finalKeep = keepMc.final.p50;
   const finalBaseline = adj(
     afterTaxNetWorth(baseline.final, capGainsPct),
     horizonYears,
@@ -168,40 +278,39 @@ export default function PayoffVsInvestPage() {
 
   const verdict = useMemo(
     () =>
-      buildVerdict({
-        payoffNetWorth: finalPayoff,
-        keepNetWorth: finalKeep,
+      buildMonteCarloVerdict({
+        keepWinRate: h2h.bWinRate,
+        keepEdge,
+        years: horizonYears,
         mortgageRatePct,
         marketReturnPct,
-        years: horizonYears,
         canFullyPayoff,
+        runs: mc.runs,
       }),
     [
-      finalPayoff,
-      finalKeep,
+      h2h,
+      keepEdge,
+      horizonYears,
       mortgageRatePct,
       marketReturnPct,
-      horizonYears,
       canFullyPayoff,
+      mc.runs,
     ],
   );
 
   const chartData = useMemo(
     () =>
-      payoff.series.map((p, i) => ({
-        year: p.year,
-        payoff: adj(p.netWorth, p.year),
-        keep: adj(keep.series[i].netWorth, p.year),
-        baseline: adj(baseline.series[i].netWorth, p.year),
+      mc.yearLabels.map((y, i) => ({
+        year: y,
+        payoffBand: [payoffMc.bands.p10[i], payoffMc.bands.p90[i]],
+        payoffMed: payoffMc.bands.p50[i],
+        keepBand: [keepMc.bands.p10[i], keepMc.bands.p90[i]],
+        keepMed: keepMc.bands.p50[i],
       })),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [payoff, keep, baseline, showReal, inflationPct],
+    [mc, payoffMc, keepMc],
   );
 
-  const crossover = useMemo(
-    () => crossoverYear(payoff.series, keep.series),
-    [payoff, keep],
-  );
+  const histStats = useMemo(() => returnStats(), []);
 
   // Curated set of years for the breakdown table.
   const tableYears = useMemo(() => {
@@ -240,7 +349,10 @@ export default function PayoffVsInvestPage() {
           <strong> keep the mortgage and invest that pile instead</strong>. Both
           choices spend the exact same amount each month — the only difference is
           where your money lives and how fast the loan disappears. Below, we play
-          both forward to age {retirementAge}.
+          both forward to age {retirementAge}{' '}
+          <strong>{mc.runs.toLocaleString()} different times</strong>, with a
+          different market history each time, because the honest answer here
+          isn't a number — it's a probability and a worst case.
         </p>
       </Card>
 
@@ -372,8 +484,132 @@ export default function PayoffVsInvestPage() {
         </div>
       </Card>
 
+      {/* ---------------- Simulation settings ---------------- */}
+      <Card title="How the futures are simulated">
+        <p className="text-small muted mt-0 mb-12">
+          Rather than assuming the market returns exactly{' '}
+          {percent(marketReturnPct, 1)} every single year — which no market has
+          ever done — we run {mc.runs.toLocaleString()} different futures and
+          look at the spread. Lumpy returns are the whole reason this decision is
+          hard, so the model has to have lumps in it.
+        </p>
+
+        <div className="mode-switch" role="group" aria-label="Return model">
+          <button
+            type="button"
+            className={`mode-switch-btn ${
+              returnMode === RETURN_MODES.BOOTSTRAP ? 'active' : ''
+            }`}
+            onClick={() => set({ returnMode: RETURN_MODES.BOOTSTRAP })}
+          >
+            Replay real history
+          </button>
+          <button
+            type="button"
+            className={`mode-switch-btn ${
+              returnMode === RETURN_MODES.NORMAL ? 'active' : ''
+            }`}
+            onClick={() => set({ returnMode: RETURN_MODES.NORMAL })}
+          >
+            Bell curve
+          </button>
+        </div>
+
+        <div className="text-tiny muted mt-8">
+          {returnMode === RETURN_MODES.BOOTSTRAP ? (
+            <>
+              Each simulated year copies an actual S&amp;P 500 year drawn at
+              random from {histStats.firstYear}–{histStats.lastYear} (
+              {histStats.count} years, {blockYears} consecutive at a time so
+              crashes keep their recoveries attached). Real history includes{' '}
+              {percent(histStats.minPct, 1)} and {percent(histStats.maxPct, 1)}{' '}
+              years — a bell curve says those should essentially never happen,
+              and yet they did.
+            </>
+          ) : (
+            <>
+              Each year is drawn from a bell curve centred on{' '}
+              {percent(marketReturnPct, 1)} with a {percent(stdDevPct, 0)} spread.
+              Easier to reason about, but it understates how often extreme years
+              actually occur — real history has fatter tails than this.
+            </>
+          )}
+        </div>
+
+        {returnMode === RETURN_MODES.NORMAL && (
+          <div className="grid grid-two mt-12">
+            <NumberField
+              label="Year-to-year swing (standard deviation)"
+              value={stdDevPct}
+              onChange={(v) => set({ stdDevPct: Math.max(0, v) })}
+              step={1}
+              suffix="% — the S&P's own historical figure is about 19%"
+            />
+          </div>
+        )}
+
+        <div className="divider" />
+
+        <label className="row text-small" style={{ fontWeight: 600, cursor: 'pointer', gap: 8 }}>
+          <input
+            type="checkbox"
+            checked={recenterToExpected}
+            onChange={(e) => set({ recenterToExpected: e.target.checked })}
+          />
+          Match history to my {percent(marketReturnPct, 1)} return assumption
+        </label>
+        <div className="text-tiny muted mt-8">
+          {recenterToExpected ? (
+            <>
+              History's actual long-run average is{' '}
+              {percent(histStats.geometricMeanPct, 2)} a year — noticeably higher
+              than the {percent(marketReturnPct, 1)} you set above. We keep
+              history's ups, downs and crashes exactly as they were, but slide the
+              whole thing down so its average matches what you actually believe.
+              Untick to use raw history instead, which will make every number
+              here much bigger.
+            </>
+          ) : (
+            <>
+              ⚠ Using raw history, which averaged{' '}
+              {percent(histStats.geometricMeanPct, 2)} a year — well above the{' '}
+              {percent(marketReturnPct, 1)} assumption you set above. Every
+              number on this page is now considerably more optimistic than your
+              own assumption implies.
+            </>
+          )}
+        </div>
+
+        <div className="grid grid-two mt-12">
+          <NumberField
+            label="Number of futures to simulate"
+            value={simRuns}
+            onChange={(v) => set({ simRuns: Math.min(20000, Math.max(200, Math.round(v))) })}
+            step={1000}
+            suffix="More runs = steadier numbers. 5,000 is plenty."
+          />
+          {returnMode === RETURN_MODES.BOOTSTRAP && (
+            <NumberField
+              label="Consecutive years copied at a time"
+              value={blockYears}
+              onChange={(v) => set({ blockYears: Math.min(20, Math.max(1, Math.round(v))) })}
+              step={1}
+              suffix="1 = shuffle every year independently. 5 keeps market streaks intact."
+            />
+          )}
+        </div>
+      </Card>
+
       {/* ---------------- Headline result ---------------- */}
-      <Card title={`Net worth at age ${retirementAge} (${dollarsLabel}, after selling investments)`}>
+      <Card
+        title={`Net worth at age ${retirementAge} across ${mc.runs.toLocaleString()} possible futures (${dollarsLabel}, after selling investments)`}
+      >
+        <p className="text-small muted mt-0 mb-12">
+          These are <strong>median</strong> outcomes — half of simulated futures
+          did better, half did worse. The range underneath each one is where 80%
+          of futures landed, and that range is the part most calculators hide.
+        </p>
+
         <div className="hero-prices">
           <div className="hero-price-block">
             <div className="label">
@@ -384,10 +620,7 @@ export default function PayoffVsInvestPage() {
               {money(finalPayoff)}
             </div>
             <div className="sub">
-              Mortgage gone {payoff.mortgageFreeYear === 0
-                ? 'on day one'
-                : `in ${Math.round(payoff.mortgageFreeYear ?? horizonYears)} yrs`}
-              , then you invest the freed-up {money(pi)}/mo.
+              {money(payoffMc.final.p10)} to {money(payoffMc.final.p90)}
             </div>
           </div>
 
@@ -402,39 +635,96 @@ export default function PayoffVsInvestPage() {
               {money(finalKeep)}
             </div>
             <div className="sub">
-              Your {money(pool)} pool stays invested while you pay the mortgage
-              normally.
+              {money(keepMc.final.p10)} to {money(keepMc.final.p90)}
             </div>
           </div>
         </div>
 
-        <div className="stat-grid mt-16">
-          <div className="stat">
-            <div className="label">Difference between the two</div>
+        {/* Win probability — the single most useful number on this page. */}
+        <div className="divider" />
+        <div className="text-small mb-8" style={{ fontWeight: 600 }}>
+          Who ends up ahead, across {mc.runs.toLocaleString()} futures?
+        </div>
+        <div className="mc-winbar">
+          <div
+            className="mc-winbar-seg"
+            style={{
+              background: COLORS.payoff,
+              width: `${verdict.payoffPct}%`,
+            }}
+          >
+            {verdict.payoffPct >= 12 ? `${verdict.payoffPct.toFixed(0)}%` : ''}
+          </div>
+          <div
+            className="mc-winbar-seg"
+            style={{ background: COLORS.keep, width: `${verdict.keepPct}%` }}
+          >
+            {verdict.keepPct >= 12 ? `${verdict.keepPct.toFixed(0)}%` : ''}
+          </div>
+        </div>
+        <div className="text-tiny muted mt-8">
+          Pay off wins {verdict.payoffPct.toFixed(1)}% of the time · keep &amp;
+          invest wins {verdict.keepPct.toFixed(1)}%
+        </div>
+
+        <div className="mc-outcome-grid mt-16">
+          {/* These two tiles report a GAP between the strategies, so the number
+              itself stays in plain ink — a coloured swatch on the caption says
+              which side is ahead. Colouring the figure red here would collide
+              with red's other job on this page (the "do nothing" series). */}
+          <div className="mc-outcome">
+            <div className="label">Typical edge to keeping</div>
             <div className="value">
-              {money(Math.abs(finalKeep - finalPayoff))}
+              {keepEdge.p50 >= 0 ? '+' : '−'}
+              {money(Math.abs(keepEdge.p50))}
             </div>
-            <div className="text-tiny muted" style={{ fontWeight: 500 }}>
-              {finalKeep > finalPayoff ? 'Keep & invest ahead' : 'Payoff ahead'}
+            <div className="sub">
+              <span
+                className="swatch"
+                style={{
+                  background: keepEdge.p50 >= 0 ? COLORS.keep : COLORS.payoff,
+                }}
+              />{' '}
+              Median gap — {keepEdge.p50 >= 0 ? 'keep & invest' : 'paying off'}{' '}
+              ahead in the middle case.
             </div>
           </div>
-          <div className="stat">
+
+          <div className="mc-outcome">
+            <div className="label">Keeping's bad case</div>
+            <div className="value">
+              {keepEdge.p10 >= 0 ? '+' : '−'}
+              {money(Math.abs(keepEdge.p10))}
+            </div>
+            <div className="sub">
+              <span
+                className="swatch"
+                style={{
+                  background: keepEdge.p10 >= 0 ? COLORS.keep : COLORS.payoff,
+                }}
+              />{' '}
+              In its worst 10% of futures, keeping the mortgage lands this far{' '}
+              {keepEdge.p10 < 0 ? 'behind' : 'ahead of'} paying it off.
+            </div>
+          </div>
+
+          <div className="mc-outcome">
+            <div className="label">Range of outcomes</div>
+            <div className="value">
+              {money(keepMc.final.p90 - keepMc.final.p10)}
+            </div>
+            <div className="sub">
+              How wide keeping's spread is, vs{' '}
+              {money(payoffMc.final.p90 - payoffMc.final.p10)} for paying off.
+            </div>
+          </div>
+
+          <div className="mc-outcome">
             <div className="label">If you do nothing extra</div>
             <div className="value" style={{ color: COLORS.baseline }}>
               {money(finalBaseline)}
             </div>
-            <div className="text-tiny muted" style={{ fontWeight: 500 }}>
-              Pool sits in cash — the lazy floor
-            </div>
-          </div>
-          <div className="stat">
-            <div className="label">Crossover point</div>
-            <div className="value">
-              {crossover == null ? 'Never flips' : `Year ${crossover}`}
-            </div>
-            <div className="text-tiny muted" style={{ fontWeight: 500 }}>
-              When the lead changes hands
-            </div>
+            <div className="sub">Pool sits in cash — the lazy floor.</div>
           </div>
         </div>
       </Card>
@@ -459,25 +749,21 @@ export default function PayoffVsInvestPage() {
       </Card>
 
       {/* ---------------- Chart ---------------- */}
-      <Card title={`Net worth over time (${dollarsLabel})`}>
-        <NetWorthCompareChart
+      <Card title={`The range of futures (${dollarsLabel})`}>
+        <FanChart
           data={chartData}
-          lines={[
-            { key: 'keep', name: 'Keep mortgage & invest', color: COLORS.keep },
+          series={[
             { key: 'payoff', name: 'Pay off the house', color: COLORS.payoff },
-            {
-              key: 'baseline',
-              name: 'Do nothing extra',
-              color: COLORS.baseline,
-              strokeWidth: 1.8,
-              dashed: true,
-            },
+            { key: 'keep', name: 'Keep mortgage & invest', color: COLORS.keep },
           ]}
+          bandLabel="80% of futures land in here"
         />
         <div className="text-tiny muted mt-8">
-          Lines show net worth on paper (investments + retirement + home equity),
-          before any sale taxes. Both active paths usually start apart and
-          converge — the gap at the end is what really matters.
+          The cones start at a single point — today, you know exactly where you
+          stand — and widen as uncertainty compounds. Notice that the two are not
+          the same width: a paid-off house doesn't care what the market does, so
+          its cone stays narrow. That difference in width is the risk you'd be
+          taking on, and it's the thing a single projected number can't show you.
         </div>
       </Card>
 
@@ -487,28 +773,30 @@ export default function PayoffVsInvestPage() {
           <MilestoneRow
             label="Mortgage-free if you pay it off"
             value={
-              payoff.mortgageFreeYear === 0
+              payoffMc.mortgageFreeYear.p50 === 0
                 ? 'Immediately'
-                : `~${Math.round(payoff.mortgageFreeYear ?? horizonYears)} years`
+                : `~${Math.round(payoffMc.mortgageFreeYear.p50)} years`
             }
           />
           <MilestoneRow
             label="Mortgage-free if you keep it"
-            value={
-              keep.mortgageFreeYear == null
-                ? `After ${horizonYears}+ years`
-                : `~${Math.round(keep.mortgageFreeYear)} years`
-            }
+            value={`~${Math.round(keepMc.mortgageFreeYear.p50)} years`}
           />
           <MilestoneRow
-            label="Crossover year (lead changes hands)"
-            value={crossover == null ? 'One path leads the whole way' : `Year ${crossover}`}
+            label="Chance keeping & investing ends ahead"
+            value={`${verdict.keepPct.toFixed(1)}% of futures`}
           />
           <MilestoneRow
-            label={`Net worth gap at age ${retirementAge}`}
-            value={`${money(Math.abs(finalKeep - finalPayoff))} (${
-              finalKeep > finalPayoff ? 'keep & invest' : 'payoff'
+            label={`Median net worth gap at age ${retirementAge}`}
+            value={`${money(Math.abs(keepEdge.p50))} (${
+              keepEdge.p50 >= 0 ? 'keep & invest' : 'payoff'
             })`}
+          />
+          <MilestoneRow
+            label="Worst 10% for keeping & investing"
+            value={`${money(Math.abs(keepEdge.p10))} ${
+              keepEdge.p10 < 0 ? 'behind payoff' : 'ahead of payoff'
+            }`}
           />
         </div>
       </Card>
@@ -519,6 +807,12 @@ export default function PayoffVsInvestPage() {
           Net worth at age {retirementAge} ({dollarsLabel}, after tax) at
           different average market returns. Your {percent(mortgageRatePct, 2)}{' '}
           mortgage is the bar investing has to beat.
+        </div>
+        <div className="allocation-warning mb-12" style={{ fontSize: 13 }}>
+          Unlike everything above, this table assumes one perfectly smooth
+          return every year — no crashes, no recoveries. Read it as "which side
+          of the line am I on", not as a forecast. The cones above are the
+          realistic version.
         </div>
         <table>
           <thead>
@@ -558,32 +852,57 @@ export default function PayoffVsInvestPage() {
       </Card>
 
       {/* ---------------- Year-by-year ---------------- */}
+      {/* The table view of the fan chart — every number in the cones is
+          reachable here without hovering anything. */}
       <Card title={`Year-by-year (${dollarsLabel})`}>
-        <table>
-          <thead>
-            <tr>
-              <th>Year</th>
-              <th>Age</th>
-              <th>Pay off</th>
-              <th>Keep &amp; invest</th>
-              <th>Do nothing</th>
-            </tr>
-          </thead>
-          <tbody>
-            {tableYears.map((y) => (
-              <tr key={y}>
-                <td>{y}</td>
-                <td>{currentAge + y}</td>
-                <td>{money(adj(payoff.series[y].netWorth, y))}</td>
-                <td>{money(adj(keep.series[y].netWorth, y))}</td>
-                <td>{money(adj(baseline.series[y].netWorth, y))}</td>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Year</th>
+                <th>Age</th>
+                <th colSpan={3} style={{ textAlign: 'center' }}>
+                  Pay off the house
+                </th>
+                <th colSpan={3} style={{ textAlign: 'center' }}>
+                  Keep mortgage &amp; invest
+                </th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+              <tr>
+                <th />
+                <th />
+                <th>Worst 10%</th>
+                <th>Median</th>
+                <th>Best 10%</th>
+                <th>Worst 10%</th>
+                <th>Median</th>
+                <th>Best 10%</th>
+              </tr>
+            </thead>
+            <tbody>
+              {tableYears.map((y) => (
+                <tr key={y}>
+                  <td>{y}</td>
+                  <td>{currentAge + y}</td>
+                  <td>{money(payoffMc.bands.p10[y])}</td>
+                  <td style={{ fontWeight: 600 }}>
+                    {money(payoffMc.bands.p50[y])}
+                  </td>
+                  <td>{money(payoffMc.bands.p90[y])}</td>
+                  <td>{money(keepMc.bands.p10[y])}</td>
+                  <td style={{ fontWeight: 600 }}>
+                    {money(keepMc.bands.p50[y])}
+                  </td>
+                  <td>{money(keepMc.bands.p90[y])}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
         <div className="text-tiny muted mt-8">
-          On-paper net worth (no sale taxes), so these run a touch higher than
-          the after-tax headline numbers up top.
+          After-tax net worth, same basis as the headline. "Worst 10%" means 10%
+          of simulated futures came out below that number — it is not a floor,
+          and things can land below it.
         </div>
       </Card>
 
@@ -594,6 +913,12 @@ export default function PayoffVsInvestPage() {
           version: send an extra amount toward the mortgage each month, OR invest
           that same amount. Same money out of your pocket either way.
         </p>
+        <div className="allocation-warning mb-12" style={{ fontSize: 13 }}>
+          This section still runs a single smooth {percent(marketReturnPct, 1)}{' '}
+          projection rather than the {mc.runs.toLocaleString()} futures used
+          above, so treat its margin as indicative. It's next in line to be
+          replaced by a full sweep across every possible split.
+        </div>
         <div className="grid grid-two mb-16">
           <NumberField
             label="Extra per month"
